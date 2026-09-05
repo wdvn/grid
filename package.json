@@ -1,7 +1,9 @@
 {
-  "name": "noname",
+  "name": "grid",
+  "displayName": "G.R.I.D. (Graphics Rendering for Independent Developers)",
+  "description": "G.R.I.D. (Graphics Rendering for Independent Developers) - Professional Web Sprite Sheet Slicer & Animation Studio",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
   "license": "BSD-3-Clause",
   "author": "wdvn <nguyenthanhluynd@gmail.com>",

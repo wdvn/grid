@@ -26,11 +26,11 @@ export function Header({
         </div>
         <div className="flex flex-col">
           <div className="flex items-center gap-2">
-            <span className="brand-text">Sprite Slicer Studio</span>
+            <span className="brand-text">G.R.I.D.</span>
             <span className="brand-badge">PRO</span>
           </div>
           <span className="text-[10px] text-slate-400 font-normal tracking-wide">
-            Web Animation & Sprite Sheet Slicer
+            Graphics Rendering for Independent Developers
           </span>
         </div>
       </div>

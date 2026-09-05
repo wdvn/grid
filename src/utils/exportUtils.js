@@ -4,7 +4,7 @@ import JSZip from 'jszip';
 export function generateAtlasJSON(imageName, imageDimensions, frames) {
   const atlas = {
     meta: {
-      app: "Sprite Sheet Slicer Studio",
+      app: "G.R.I.D. (Graphics Rendering for Independent Developers)",
       version: "1.0",
       image: imageName || "spritesheet.png",
       format: "RGBA8888",
