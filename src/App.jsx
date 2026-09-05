@@ -35,6 +35,7 @@ export default function App() {
   // Frames & Selection across all sheets (each frame has sheetId)
   const [frames, setFrames] = useState([]);
   const [selectedFrameId, setSelectedFrameId] = useState(null);
+  const [selectedFrameIds, setSelectedFrameIds] = useState([]);
 
   // Godot SpriteFrames Animations State
   const [animations, setAnimations] = useState([]);
@@ -564,11 +565,15 @@ export default function App() {
   // Godot SpriteFrames Animation Handlers
   const handleAddAnimation = useCallback((customName) => {
     const name = customName || `anim_${animations.length + 1}`;
-    const newAnim = createNewAnimation(name, selectedFrameId ? [selectedFrameId] : [], 10, true);
+    const initialFrameIds = selectedFrameIds.length > 0
+      ? [...selectedFrameIds]
+      : (selectedFrameId ? [selectedFrameId] : []);
+    const newAnim = createNewAnimation(name, initialFrameIds, 10, true);
     setAnimations((prev) => [...prev, newAnim]);
     setSelectedAnimationId(newAnim.id);
+    setPlaybackFrameIndex(0);
     return newAnim;
-  }, [animations.length, selectedFrameId]);
+  }, [animations.length, selectedFrameIds, selectedFrameId]);
 
   const handleDuplicateAnimation = useCallback((animId) => {
     const target = animations.find((a) => a.id === animId);
@@ -635,6 +640,106 @@ export default function App() {
     );
   }, []);
 
+  // Select frame with support for multi-select (Ctrl/Cmd) and range-select (Shift)
+  const handleSelectFrame = useCallback((id, options = {}) => {
+    if (!id) {
+      setSelectedFrameId(null);
+      setSelectedFrameIds([]);
+      return;
+    }
+
+    const { isMulti = false, isRange = false } = options;
+
+    if (isMulti) {
+      setSelectedFrameIds((prev) => {
+        const next = prev.includes(id)
+          ? prev.filter((item) => item !== id)
+          : [...prev, id];
+        setSelectedFrameId(next[next.length - 1] || null);
+        return next;
+      });
+    } else if (isRange && selectedFrameId) {
+      const activeList = activeSheetId
+        ? frames.filter((f) => f.sheetId === activeSheetId)
+        : frames;
+      const idxA = activeList.findIndex((f) => f.id === selectedFrameId);
+      const idxB = activeList.findIndex((f) => f.id === id);
+      if (idxA !== -1 && idxB !== -1) {
+        const start = Math.min(idxA, idxB);
+        const end = Math.max(idxA, idxB);
+        const rangeIds = activeList.slice(start, end + 1).map((f) => f.id);
+        setSelectedFrameIds(rangeIds);
+        setSelectedFrameId(id);
+      } else {
+        setSelectedFrameId(id);
+        setSelectedFrameIds([id]);
+      }
+    } else {
+      setSelectedFrameId(id);
+      setSelectedFrameIds([id]);
+    }
+  }, [selectedFrameId, activeSheetId, frames]);
+
+  const handleSelectAllFrames = useCallback(() => {
+    const activeList = activeSheetId
+      ? frames.filter((f) => f.sheetId === activeSheetId)
+      : frames;
+    const ids = activeList.map((f) => f.id);
+    setSelectedFrameIds(ids);
+    setSelectedFrameId(ids[0] || null);
+  }, [activeSheetId, frames]);
+
+  const handleDeselectAllFrames = useCallback(() => {
+    setSelectedFrameId(null);
+    setSelectedFrameIds([]);
+  }, []);
+
+  // Apply selected frames to active animation (replaces all existing frames in anim)
+  const handleApplySelectedFrames = useCallback((animId) => {
+    const targetAnimId = animId || selectedAnimationId;
+    if (!targetAnimId) return;
+    const targetIds = selectedFrameIds.length > 0 ? selectedFrameIds : (selectedFrameId ? [selectedFrameId] : []);
+    if (targetIds.length === 0) return;
+
+    setAnimations((prev) =>
+      prev.map((a) =>
+        a.id === targetAnimId ? { ...a, frameIds: [...targetIds] } : a
+      )
+    );
+    setPlaybackFrameIndex(0);
+  }, [selectedAnimationId, selectedFrameIds, selectedFrameId]);
+
+  // Append selected frames to active animation
+  const handleAddSelectedFrames = useCallback((animId) => {
+    const targetAnimId = animId || selectedAnimationId;
+    if (!targetAnimId) return;
+    const targetIds = selectedFrameIds.length > 0 ? selectedFrameIds : (selectedFrameId ? [selectedFrameId] : []);
+    if (targetIds.length === 0) return;
+
+    setAnimations((prev) =>
+      prev.map((a) =>
+        a.id === targetAnimId ? { ...a, frameIds: [...a.frameIds, ...targetIds] } : a
+      )
+    );
+  }, [selectedAnimationId, selectedFrameIds, selectedFrameId]);
+
+  // Add all frames of a specific sheet to animation
+  const handleAddSheetFrames = useCallback((animId, sheetId) => {
+    const targetAnimId = animId || selectedAnimationId;
+    const targetSheetId = sheetId || activeSheetId;
+    if (!targetAnimId || !targetSheetId) return;
+    const sheetFrames = frames.filter((f) => f.sheetId === targetSheetId);
+    if (sheetFrames.length === 0) return;
+
+    setAnimations((prev) =>
+      prev.map((a) =>
+        a.id === targetAnimId
+          ? { ...a, frameIds: [...a.frameIds, ...sheetFrames.map((f) => f.id)] }
+          : a
+      )
+    );
+  }, [selectedAnimationId, activeSheetId, frames]);
+
   const handleSelectAnimation = (animId) => {
     setSelectedAnimationId(animId);
     setPlaybackFrameIndex(0);
@@ -651,8 +756,8 @@ export default function App() {
     onDuplicateFrame: handleDuplicateFrame,
     onDeleteFrame: handleDeleteFrame,
     onNudgeFrame: handleNudgeFrame,
-    onSelectAll: () => setSelectedFrameId(frames[0]?.id || null),
-    onDeselectAll: () => setSelectedFrameId(null),
+    onSelectAll: handleSelectAllFrames,
+    onDeselectAll: handleDeselectAllFrames,
     onPasteImage: (pastedSrc) => loadSpriteImage(pastedSrc)
   });
 
@@ -675,16 +780,22 @@ export default function App() {
       <main className="main-workspace">
         {/* Left Column: Frame Properties & Pivot Inspector */}
         <FrameProperties
-          selectedFrame={frames.find((f) => f.id === selectedFrameId)}
-          selectedIndex={frames.findIndex((f) => f.id === selectedFrameId)}
-          totalFrames={frames.length}
+          frames={frames}
+          selectedFrameId={selectedFrameId}
+          selectedFrameIds={selectedFrameIds}
+          activeAnimation={animations.find(a => a.id === selectedAnimationId) || animations[0]}
+          activeSheetId={activeSheetId}
+          onSelectFrame={handleSelectFrame}
+          onSelectAllFrames={handleSelectAllFrames}
+          onDeselectAllFrames={handleDeselectAllFrames}
+          onApplySelectedToAnimation={handleApplySelectedFrames}
+          onAddSelectedToAnimation={handleAddSelectedFrames}
           onUpdateFrame={handleUpdateFrame}
           onDuplicateFrame={handleDuplicateFrame}
           onDeleteFrame={handleDeleteFrame}
+          onMoveFrameOrder={handleMoveFrameOrder}
           imageDimensions={imageDimensions}
-          frames={frames}
           sheetMap={sheetMap}
-          onSelectFrame={setSelectedFrameId}
         />
 
         {/* Center Column: Interactive Sprite Sheet Canvas with Multi-Sheet Tab Bar */}
@@ -693,7 +804,8 @@ export default function App() {
           imageDimensions={imageDimensions}
           frames={frames}
           selectedFrameId={selectedFrameId}
-          onSelectFrame={setSelectedFrameId}
+          selectedFrameIds={selectedFrameIds}
+          onSelectFrame={handleSelectFrame}
           onAddFrame={handleAddFrame}
           onUpdateFrame={handleUpdateFrame}
           onAutoDetect={handleAutoDetect}
@@ -716,7 +828,8 @@ export default function App() {
           sheetMap={sheetMap}
           frames={frames}
           selectedFrameId={selectedFrameId}
-          onSelectFrame={setSelectedFrameId}
+          selectedFrameIds={selectedFrameIds}
+          onSelectFrame={handleSelectFrame}
           animations={animations}
           selectedAnimationId={selectedAnimationId}
           onSelectAnimation={handleSelectAnimation}
@@ -736,7 +849,9 @@ export default function App() {
           sheetMap={sheetMap}
           frames={frames}
           selectedFrameId={selectedFrameId}
-          onSelectFrame={setSelectedFrameId}
+          selectedFrameIds={selectedFrameIds}
+          activeSheetId={activeSheetId}
+          onSelectFrame={handleSelectFrame}
           onDuplicateFrame={handleDuplicateFrame}
           onDeleteFrame={handleDeleteFrame}
           onMoveFrameOrder={handleMoveFrameOrder}
@@ -747,6 +862,9 @@ export default function App() {
           onDuplicateAnimation={handleDuplicateAnimation}
           onDeleteAnimation={handleDeleteAnimation}
           onUpdateAnimation={handleUpdateAnimation}
+          onApplySelectedFrames={handleApplySelectedFrames}
+          onAddSelectedFrames={handleAddSelectedFrames}
+          onAddSheetFrames={handleAddSheetFrames}
           onAddFrameToAnimation={handleAddFrameToAnimation}
           onRemoveFrameFromAnimation={handleRemoveFrameFromAnimation}
           onReorderAnimationFrames={handleReorderAnimationFrames}

@@ -13,17 +13,26 @@ export function FramesTrack({
   activeAnimation,
   activeFrames = [],
   selectedFrameId,
+  selectedFrameIds = [],
+  activeSheetId,
   selectedIndexInAnimation,
   isPreviewPlaying,
   previewFrameIdx,
   onTogglePlay,
   onSelectFrame,
   onUpdateAnimation,
-  onAddFrameToAnimation,
+  onApplySelectedFrames,
+  onAddSelectedFrames,
+  onAddSelectedFrame,
+  onAddSheetFrames,
   onRemoveFrameFromAnimation,
   onReorderAnimationFrames
 }) {
   const scrollRef = useRef(null);
+
+  // Sliced frames belonging to the current active sheet
+  const currentSheetFrames = activeSheetId ? frames.filter(f => f.sheetId === activeSheetId) : frames;
+  const currentSheetName = sheetMap?.get(activeSheetId)?.name || '';
 
   // Auto-scroll timeline to active/selected frame
   useEffect(() => {
@@ -43,6 +52,9 @@ export function FramesTrack({
         activeFramesCount={activeFrames.length}
         hasSlicedFrames={frames.length > 0}
         selectedFrameId={selectedFrameId}
+        selectedFrameIds={selectedFrameIds}
+        sheetFramesCount={currentSheetFrames.length}
+        activeSheetName={currentSheetName}
         selectedIndexInAnimation={selectedIndexInAnimation}
         isPreviewPlaying={isPreviewPlaying}
         onTogglePlay={onTogglePlay}
@@ -52,9 +64,24 @@ export function FramesTrack({
         onUpdateLoop={(loop) => {
           if (activeAnimation) onUpdateAnimation?.(activeAnimation.id, { loop });
         }}
+        onApplySelectedFrames={() => {
+          if (activeAnimation) {
+            onApplySelectedFrames?.(activeAnimation.id);
+          }
+        }}
+        onAddSelectedFrames={() => {
+          if (activeAnimation) {
+            onAddSelectedFrames?.(activeAnimation.id);
+          }
+        }}
         onAddSelectedFrame={() => {
           if (activeAnimation && selectedFrameId) {
-            onAddFrameToAnimation?.(activeAnimation.id, selectedFrameId);
+            onAddSelectedFrames?.(activeAnimation.id);
+          }
+        }}
+        onAddSheetFrames={() => {
+          if (activeAnimation && currentSheetFrames.length > 0) {
+            onAddSheetFrames?.(activeAnimation.id, activeSheetId);
           }
         }}
         onAddAllFrames={() => {
@@ -141,11 +168,24 @@ export function FramesTrack({
         {activeFrames.length === 0 && (
           <EmptyFramesState
             animationName={activeAnimation?.name}
+            selectedCount={selectedFrameIds.length}
             hasSelectedFrame={Boolean(selectedFrameId)}
             hasSlicedFrames={frames.length > 0}
+            sheetFramesCount={currentSheetFrames.length}
+            activeSheetName={currentSheetName}
+            onApplySelected={() => {
+              if (activeAnimation) {
+                onApplySelectedFrames?.(activeAnimation.id);
+              }
+            }}
             onAddSelected={() => {
-              if (activeAnimation && selectedFrameId) {
-                onAddFrameToAnimation?.(activeAnimation.id, selectedFrameId);
+              if (activeAnimation) {
+                onAddSelectedFrames?.(activeAnimation.id);
+              }
+            }}
+            onAddSheetFrames={() => {
+              if (activeAnimation && currentSheetFrames.length > 0) {
+                onAddSheetFrames?.(activeAnimation.id, activeSheetId);
               }
             }}
             onAddAll={() => {

@@ -3,7 +3,9 @@ import {
   Play,
   Pause,
   Plus,
+  Check,
   Sparkles,
+  Layers,
   ChevronLeft,
   ChevronRight,
   X,
@@ -21,18 +23,25 @@ export function TrackToolbar({
   activeFramesCount = 0,
   hasSlicedFrames,
   selectedFrameId,
+  selectedFrameIds = [],
   selectedIndexInAnimation,
   isPreviewPlaying,
   onTogglePlay,
   onUpdateFps,
   onUpdateLoop,
+  onApplySelectedFrames,
+  onAddSelectedFrames,
   onAddSelectedFrame,
+  onAddSheetFrames,
   onAddAllFrames,
   onReorderLeft,
   onReorderRight,
   onRemoveSelectedFrame,
-  onClearAllFrames
+  onClearAllFrames,
+  sheetFramesCount = 0,
+  activeSheetName = ''
 }) {
+  const selectedCount = selectedFrameIds.length > 0 ? selectedFrameIds.length : (selectedFrameId ? 1 : 0);
   const canReorderLeft = activeAnimation && selectedIndexInAnimation > 0;
   const canReorderRight =
     activeAnimation &&
@@ -109,23 +118,47 @@ export function TrackToolbar({
 
       {/* Right: Frame Management Actions */}
       <div className="flex items-center gap-1 flex-shrink-0">
-        {/* Add Selected Canvas Frame */}
+        {/* Apply Selected: Replaces animation frames with selected frames */}
         <button
-          onClick={onAddSelectedFrame}
-          disabled={!activeAnimation || !selectedFrameId}
-          className="btn btn-primary h-7 px-2.5 text-xs rounded-md shadow flex items-center gap-1 disabled:opacity-30 disabled:pointer-events-none"
-          title="Append currently selected canvas frame to this animation"
+          onClick={onApplySelectedFrames || onAddSelectedFrame}
+          disabled={!activeAnimation || selectedCount === 0}
+          className="btn bg-emerald-600/90 hover:bg-emerald-500 text-white shadow-emerald-500/20 shadow h-7 px-2 text-xs rounded-md flex items-center gap-1 font-semibold disabled:opacity-30 disabled:pointer-events-none transition-all"
+          title={`Replace animation frames with currently selected ${selectedCount} frame(s)`}
         >
-          <Plus size={13} />
-          <span>Add Selected</span>
+          <Check size={12} className="text-white" />
+          <span>Apply Selected{selectedCount > 0 ? ` (${selectedCount})` : ''}</span>
         </button>
 
-        {/* Add All Sliced Frames */}
+        {/* Add Selected: Appends selected frames to animation */}
+        <button
+          onClick={onAddSelectedFrames || onAddSelectedFrame}
+          disabled={!activeAnimation || selectedCount === 0}
+          className="btn btn-primary h-7 px-2 text-xs rounded-md shadow flex items-center gap-1 disabled:opacity-30 disabled:pointer-events-none"
+          title={`Append currently selected ${selectedCount} frame(s) to this animation`}
+        >
+          <Plus size={12} />
+          <span>Add{selectedCount > 0 ? ` (${selectedCount})` : ''}</span>
+        </button>
+
+        {/* Add All Frames of Active Sheet */}
+        {sheetFramesCount > 0 && (
+          <button
+            onClick={onAddSheetFrames}
+            disabled={!activeAnimation}
+            className="btn btn-secondary h-7 px-2 text-xs rounded-md flex items-center gap-1 text-slate-300 disabled:opacity-30 disabled:pointer-events-none hover:text-white"
+            title={`Append all ${sheetFramesCount} frames from current sheet "${activeSheetName}" to this animation`}
+          >
+            <Layers size={11} className="text-blue-400" />
+            <span>Sheet ({sheetFramesCount})</span>
+          </button>
+        )}
+
+        {/* Add All Sliced Frames from Project */}
         <button
           onClick={onAddAllFrames}
           disabled={!activeAnimation || !hasSlicedFrames}
-          className="btn btn-secondary h-7 px-2 text-xs rounded-md flex items-center gap-1 text-slate-300 disabled:opacity-30 disabled:pointer-events-none"
-          title="Append all sliced frames from sheet to this animation"
+          className="btn btn-secondary h-7 px-2 text-xs rounded-md flex items-center gap-1 text-slate-400 hover:text-slate-200 disabled:opacity-30 disabled:pointer-events-none"
+          title="Append all sliced frames across all sheets to this animation"
         >
           <Sparkles size={11} className="text-amber-400" />
           <span>All</span>

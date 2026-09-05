@@ -6,6 +6,7 @@ export function CanvasWorkspace({
   imageDimensions,
   frames,
   selectedFrameId,
+  selectedFrameIds = [],
   onSelectFrame,
   onAddFrame,
   onUpdateFrame,
@@ -155,15 +156,19 @@ export function CanvasWorkspace({
     const frameEl = e.target.closest('[data-frame-id]');
     if (frameEl) {
       const clickedId = frameEl.getAttribute('data-frame-id');
-      onSelectFrame(clickedId);
+      const isMulti = e.ctrlKey || e.metaKey;
+      const isRange = e.shiftKey;
+
+      onSelectFrame(clickedId, { isMulti, isRange });
 
       const activeFrame = frames.find(f => f.id === clickedId);
-      if (activeFrame) {
+      if (activeFrame && !isMulti && !isRange) {
         setIsMovingFrame(true);
         setMoveStart({ x: e.clientX, y: e.clientY });
         setInitialFramePos({ ...activeFrame });
         return;
       }
+      return;
     }
 
     // Otherwise: Start drawing a new frame selection box!
@@ -614,29 +619,42 @@ export function CanvasWorkspace({
           {/* Render Frame Boxes */}
           {visibleFrames.map((frame, index) => {
             const isSelected = frame.id === selectedFrameId;
+            const isInMultiSelection = selectedFrameIds.includes(frame.id);
             const invScale = 1 / zoom;
+
+            const borderStyle = isSelected
+              ? `${Math.max(1, 1.5 * invScale)}px solid #3b82f6`
+              : isInMultiSelection
+              ? `${Math.max(1, 1.5 * invScale)}px solid #06b6d4`
+              : `${Math.max(0.75, 1 * invScale)}px dashed rgba(96, 165, 250, 0.55)`;
+
+            const bgStyle = isSelected
+              ? 'rgba(59, 130, 246, 0.12)'
+              : isInMultiSelection
+              ? 'rgba(6, 182, 212, 0.12)'
+              : 'transparent';
+
+            const shadowStyle = isSelected
+              ? `0 0 0 ${Math.max(1, 1 * invScale)}px rgba(59, 130, 246, 0.35)`
+              : isInMultiSelection
+              ? `0 0 0 ${Math.max(1, 1 * invScale)}px rgba(6, 182, 212, 0.35)`
+              : 'none';
 
             return (
               <div
                 key={frame.id}
                 data-frame-id={frame.id}
-                className={`frame-box ${isSelected ? 'is-selected' : ''}`}
+                className={`frame-box ${isSelected ? 'is-selected' : ''} ${isInMultiSelection ? 'is-multi-selected' : ''}`}
                 style={{
                   position: 'absolute',
                   left: `${frame.x}px`,
                   top: `${frame.y}px`,
                   width: `${frame.w}px`,
                   height: `${frame.h}px`,
-                  border: isSelected
-                    ? `${Math.max(1, 1.5 * invScale)}px solid #3b82f6`
-                    : `${Math.max(0.75, 1 * invScale)}px dashed rgba(96, 165, 250, 0.55)`,
-                  backgroundColor: isSelected
-                    ? 'rgba(59, 130, 246, 0.08)'
-                    : 'transparent',
-                  boxShadow: isSelected
-                    ? `0 0 0 ${Math.max(1, 1 * invScale)}px rgba(59, 130, 246, 0.35)`
-                    : 'none',
-                  zIndex: isSelected ? 25 : 10,
+                  border: borderStyle,
+                  backgroundColor: bgStyle,
+                  boxShadow: shadowStyle,
+                  zIndex: isSelected ? 25 : (isInMultiSelection ? 20 : 10),
                   cursor: 'move'
                 }}
               >
@@ -649,8 +667,12 @@ export function CanvasWorkspace({
                       left: 0,
                       transform: `scale(${invScale})`,
                       transformOrigin: 'top left',
-                      background: isSelected ? '#2563eb' : 'rgba(15, 23, 42, 0.72)',
-                      color: isSelected ? '#ffffff' : '#94a3b8',
+                      background: isSelected
+                        ? '#2563eb'
+                        : isInMultiSelection
+                        ? '#0891b2'
+                        : 'rgba(15, 23, 42, 0.72)',
+                      color: (isSelected || isInMultiSelection) ? '#ffffff' : '#94a3b8',
                       fontSize: '9px',
                       fontFamily: 'monospace',
                       fontWeight: '700',

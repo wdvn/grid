@@ -11,6 +11,8 @@ export function FrameTimeline({
   sheetMap,
   frames = [],
   selectedFrameId,
+  selectedFrameIds = [],
+  activeSheetId,
   onSelectFrame,
   animations = [],
   selectedAnimationId,
@@ -19,6 +21,9 @@ export function FrameTimeline({
   onDuplicateAnimation,
   onDeleteAnimation,
   onUpdateAnimation,
+  onApplySelectedFrames,
+  onAddSelectedFrames,
+  onAddSheetFrames,
   onAddFrameToAnimation,
   onRemoveFrameFromAnimation,
   onReorderAnimationFrames,
@@ -102,12 +107,17 @@ export function FrameTimeline({
           activeAnimation={activeAnimation}
           activeFrames={activeFrames}
           selectedFrameId={selectedFrameId}
+          selectedFrameIds={selectedFrameIds}
+          activeSheetId={activeSheetId}
           selectedIndexInAnimation={selectedIndexInAnimation}
           isPreviewPlaying={isPreviewPlaying}
           previewFrameIdx={previewFrameIdx}
           onTogglePlay={togglePlay}
           onSelectFrame={onSelectFrame}
           onUpdateAnimation={onUpdateAnimation}
+          onApplySelectedFrames={onApplySelectedFrames}
+          onAddSelectedFrames={onAddSelectedFrames}
+          onAddSheetFrames={onAddSheetFrames}
           onAddFrameToAnimation={onAddFrameToAnimation}
           onRemoveFrameFromAnimation={onRemoveFrameFromAnimation}
           onReorderAnimationFrames={onReorderAnimationFrames}

@@ -78,10 +78,12 @@ export function AnimationPreview({
   // Resolve frames for current clip mode
   const activeFrames = useMemo(() => {
     if (frames.length === 0) return [];
-    if (activeAnimation && activeAnimation.frameIds && activeAnimation.frameIds.length > 0) {
-      const frameMap = new Map(frames.map((f) => [f.id, f]));
-      const resolved = activeAnimation.frameIds.map((id) => frameMap.get(id)).filter(Boolean);
-      if (resolved.length > 0) return resolved;
+    if (activeAnimation) {
+      if (activeAnimation.frameIds && activeAnimation.frameIds.length > 0) {
+        const frameMap = new Map(frames.map((f) => [f.id, f]));
+        return activeAnimation.frameIds.map((id) => frameMap.get(id)).filter(Boolean);
+      }
+      return [];
     }
     return frames;
   }, [activeAnimation, frames]);
@@ -152,12 +154,19 @@ export function AnimationPreview({
 
   // Initialize or update state machine when graph changes
   useEffect(() => {
-    stateMachineRef.current = new CharacterStateMachine(graphConfig);
+    stateMachineRef.current = new CharacterStateMachine(graphConfig, animations, frames);
     activeStateIdRef.current = graphConfig.defaultState || 'Idle';
     setActiveStateId(activeStateIdRef.current);
     charFrameIdxRef.current = 0;
     frameAccRef.current = 0;
   }, [graphConfig]);
+
+  // Keep state machine context dynamically updated with latest animations and frames
+  useEffect(() => {
+    if (stateMachineRef.current) {
+      stateMachineRef.current.setContext(animations, frames);
+    }
+  }, [animations, frames]);
 
   // Real-time keyboard input tracking (WASD + Arrows + Space)
   const keysDownRef = useRef(new Set());
@@ -501,7 +510,10 @@ export function AnimationPreview({
     if (!ctx) return;
 
     const activeFrame = activeFrames[currentFrameIndex];
-    if (!activeFrame || activeFrame.w <= 0 || activeFrame.h <= 0) return;
+    if (!activeFrame || activeFrame.w <= 0 || activeFrame.h <= 0) {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      return;
+    }
 
     const targetW = Math.max(1, activeFrame.w * zoomScale);
     const targetH = Math.max(1, activeFrame.h * zoomScale);
@@ -654,7 +666,7 @@ export function AnimationPreview({
         ref={containerRef}
         className={`flex-1 min-h-0 rounded-xl border border-white/10 relative overflow-hidden mt-2 flex items-center justify-center shadow-inner ${getBgStyleClass()}`}
       >
-        {frames.length > 0 && imageElement ? (
+        {previewMode === 'character' || activeFrames.length > 0 ? (
           <canvas
             ref={canvasRef}
             className="shadow-2xl"
@@ -677,8 +689,12 @@ export function AnimationPreview({
             }}
           />
         ) : (
-          <div className="text-slate-500 text-xs font-mono text-center p-4">
-            No frames sliced yet. Slice frames to preview animations.
+          <div className="text-slate-400 text-xs font-mono text-center p-4 flex flex-col items-center gap-1.5">
+            <span className="text-blue-300 font-bold">"{activeAnimation?.name || 'Animation'}"</span>
+            <span>has no frames yet.</span>
+            <span className="text-[11px] text-slate-500">
+              Select frames on canvas or list, then click "Apply Selected" in the timeline dock below.
+            </span>
           </div>
         )}
 

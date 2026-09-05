@@ -2,7 +2,7 @@
 import { groupFramesByRows } from './animationClips';
 
 export class CharacterStateMachine {
-  constructor(config = {}) {
+  constructor(config = {}, animations = [], frames = []) {
     this.parameters = {
       speed: 0.0,
       moveX: 0.0,
@@ -16,6 +16,16 @@ export class CharacterStateMachine {
     this.currentStateId = config.defaultState || 'Idle';
     this.lastDirection = 'down'; // 'down' | 'up' | 'right' | 'left'
     this.stateTimer = 0;
+    this.animations = animations || [];
+    this.frames = frames || [];
+    this.frameMap = new Map(this.frames.map(f => [f.id, f]));
+  }
+
+  // Update live animations and frames context to guarantee dynamic frame updates reflect immediately
+  setContext(animations = [], frames = []) {
+    this.animations = animations || [];
+    this.frames = frames || [];
+    this.frameMap = new Map(this.frames.map(f => [f.id, f]));
   }
 
   // Update parameters from input (e.g. keyboard / joystick)
@@ -85,28 +95,60 @@ export class CharacterStateMachine {
     const state = this.states[this.currentStateId];
     if (!state) return null;
 
+    const dir = this.lastDirection || 'down';
+
     if (state.type === 'BlendSpace2D') {
-      // Pick direction clip (down, up, right, left)
+      // 1. Try resolving dynamically from clipIds if animations exist
+      if (state.clipIds && state.clipIds[dir] && this.animations.length > 0) {
+        const anim = this.animations.find(a => a.id === state.clipIds[dir]);
+        if (anim && Array.isArray(anim.frameIds) && anim.frameIds.length > 0) {
+          const resolved = anim.frameIds.map(id => this.frameMap.get(id)).filter(Boolean);
+          if (resolved.length > 0) {
+            return {
+              stateId: this.currentStateId,
+              direction: dir,
+              clip: resolved
+            };
+          }
+        }
+      }
+
+      // 2. Fallback to static clip array
       const dirClips = state.clips || {};
-      const clip = dirClips[this.lastDirection] || dirClips['down'] || Object.values(dirClips)[0];
+      const clip = dirClips[dir] || dirClips['down'] || Object.values(dirClips)[0];
       return {
         stateId: this.currentStateId,
-        direction: this.lastDirection,
+        direction: dir,
         clip: clip || null
       };
     }
 
     if (state.type === 'OneShot') {
+      // 1. Try resolving dynamically from clipId
+      if (state.clipId && this.animations.length > 0) {
+        const anim = this.animations.find(a => a.id === state.clipId);
+        if (anim && Array.isArray(anim.frameIds) && anim.frameIds.length > 0) {
+          const resolved = anim.frameIds.map(id => this.frameMap.get(id)).filter(Boolean);
+          if (resolved.length > 0) {
+            return {
+              stateId: this.currentStateId,
+              direction: dir,
+              clip: resolved
+            };
+          }
+        }
+      }
+
       return {
         stateId: this.currentStateId,
-        direction: this.lastDirection,
+        direction: dir,
         clip: state.clip || null
       };
     }
 
     return {
       stateId: this.currentStateId,
-      direction: this.lastDirection,
+      direction: dir,
       clip: state.clip || null
     };
   }
@@ -117,7 +159,7 @@ export function createDefaultCharacterGraph(frames = [], animations = []) {
   const frameMap = new Map(frames.map(f => [f.id, f]));
   const resolveAnim = (pattern) => {
     const found = animations.find(a => a.name.toLowerCase().includes(pattern.toLowerCase()));
-    return found ? found.frameIds.map(id => frameMap.get(id)).filter(Boolean) : null;
+    return found ? { anim: found, frames: found.frameIds.map(id => frameMap.get(id)).filter(Boolean) } : null;
   };
 
   const idleDown = resolveAnim('idle_down') || resolveAnim('idle');
@@ -152,10 +194,16 @@ export function createDefaultCharacterGraph(frames = [], animations = []) {
           type: 'BlendSpace2D',
           position: { x: 260, y: 170 },
           clips: {
-            down: idleDown,
-            up: idleUp,
-            right: idleRight,
-            left: idleLeft
+            down: idleDown.frames,
+            up: idleUp.frames,
+            right: idleRight.frames,
+            left: idleLeft.frames
+          },
+          clipIds: {
+            down: idleDown.anim?.id,
+            up: idleUp.anim?.id,
+            right: idleRight.anim?.id,
+            left: idleLeft.anim?.id
           }
         },
         Run: {
@@ -164,10 +212,16 @@ export function createDefaultCharacterGraph(frames = [], animations = []) {
           type: 'BlendSpace2D',
           position: { x: 550, y: 170 },
           clips: {
-            down: runDown,
-            up: runUp,
-            right: runRight,
-            left: runLeft
+            down: runDown.frames,
+            up: runUp.frames,
+            right: runRight.frames,
+            left: runLeft.frames
+          },
+          clipIds: {
+            down: runDown.anim?.id,
+            up: runUp.anim?.id,
+            right: runRight.anim?.id,
+            left: runLeft.anim?.id
           }
         },
         Action: {
@@ -177,7 +231,8 @@ export function createDefaultCharacterGraph(frames = [], animations = []) {
           duration: 0.45,
           returnState: 'Idle',
           position: { x: 400, y: 320 },
-          clip: actionClip || runRight.slice(0, 4)
+          clip: actionClip?.frames || runRight.frames.slice(0, 4),
+          clipId: actionClip?.anim?.id || runRight.anim?.id
         }
       },
       transitions: [
@@ -215,6 +270,16 @@ export function createDefaultCharacterGraph(frames = [], animations = []) {
     const rightRun = rows[2];
     const leftRun = rows[3];
 
+    const findAnimForRow = (rowFrames) => {
+      const firstId = rowFrames[0]?.id;
+      return animations.find(a => a.frameIds && a.frameIds.includes(firstId));
+    };
+
+    const animDown = findAnimForRow(downRun) || animations.find(a => a.name.includes('down'));
+    const animUp = findAnimForRow(upRun) || animations.find(a => a.name.includes('up'));
+    const animRight = findAnimForRow(rightRun) || animations.find(a => a.name.includes('right'));
+    const animLeft = findAnimForRow(leftRun) || animations.find(a => a.name.includes('left'));
+
     return {
       name: 'Fox Character Graph',
       parameters: {
@@ -249,6 +314,12 @@ export function createDefaultCharacterGraph(frames = [], animations = []) {
             up: upRun,
             right: rightRun,
             left: leftRun
+          },
+          clipIds: {
+            down: animDown?.id,
+            up: animUp?.id,
+            right: animRight?.id,
+            left: animLeft?.id
           }
         },
         Action: {
