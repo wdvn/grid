@@ -90,7 +90,7 @@ export function QuickGridModal({
           <div className="flex bg-slate-900 p-1 rounded-lg border border-white/10 text-xs">
             <button
               onClick={() => setMode('count')}
-              className={`flex-1 py-1.5 rounded-md font-semibold ${
+              className={`flex-1 h-7 rounded-md font-semibold flex items-center justify-center transition-colors ${
                 mode === 'count' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-slate-200'
               }`}
             >
@@ -98,7 +98,7 @@ export function QuickGridModal({
             </button>
             <button
               onClick={() => setMode('size')}
-              className={`flex-1 py-1.5 rounded-md font-semibold ${
+              className={`flex-1 h-7 rounded-md font-semibold flex items-center justify-center transition-colors ${
                 mode === 'size' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-slate-200'
               }`}
             >
@@ -215,7 +215,7 @@ export function QuickGridModal({
         </div>
 
         {/* Footer */}
-        <div className="p-4 bg-slate-900/80 border-t border-white/10 flex justify-end gap-2">
+        <div className="modal-footer">
           <button onClick={onClose} className="btn btn-secondary text-xs">
             Cancel
           </button>

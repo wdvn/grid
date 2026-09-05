@@ -57,14 +57,14 @@ export function FrameProperties({
   const currentViewTab = selectedFrame ? activeTab : 'list';
 
   return (
-    <div className="glass-panel p-3 flex flex-col h-full overflow-hidden select-none">
+    <div className="glass-panel p-2.5 flex flex-col h-full overflow-hidden select-none">
       {/* Header Bar with Tabs */}
       <div className="flex items-center justify-between pb-2 border-b border-white/10 mb-2 flex-shrink-0">
         <div className="flex items-center gap-1 bg-slate-900/80 p-0.5 rounded-lg border border-white/10">
           <button
             onClick={() => setActiveTab('inspector')}
             disabled={!selectedFrame}
-            className={`flex items-center gap-1 px-2.5 py-1 text-xs rounded font-bold transition-all ${
+            className={`h-7 flex items-center gap-1 px-2.5 text-xs rounded font-semibold transition-all ${
               currentViewTab === 'inspector'
                 ? 'bg-blue-600 text-white shadow'
                 : 'text-slate-400 hover:text-slate-200'
@@ -77,7 +77,7 @@ export function FrameProperties({
 
           <button
             onClick={() => setActiveTab('list')}
-            className={`flex items-center gap-1 px-2.5 py-1 text-xs rounded font-bold transition-all ${
+            className={`h-7 flex items-center gap-1 px-2.5 text-xs rounded font-semibold transition-all ${
               currentViewTab === 'list'
                 ? 'bg-blue-600 text-white shadow'
                 : 'text-slate-400 hover:text-slate-200'
@@ -90,7 +90,7 @@ export function FrameProperties({
         </div>
 
         {selectedCount > 0 && (
-          <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30">
+          <span className="badge badge-blue">
             {selectedCount} selected
           </span>
         )}
@@ -98,8 +98,8 @@ export function FrameProperties({
 
       {/* Target Animation Quick-Assign Bar (Always visible when frames are selected & animation active) */}
       {activeAnimation && selectedCount > 0 && (
-        <div className="mb-2 p-2 rounded-lg bg-slate-950/90 border border-blue-500/30 flex flex-col gap-1.5 shadow flex-shrink-0">
-          <div className="flex items-center justify-between text-[11px]">
+        <div className="mb-2 p-1.5 rounded-lg bg-slate-950/90 border border-blue-500/30 flex flex-col gap-1 shadow flex-shrink-0">
+          <div className="flex items-center justify-between text-xs px-0.5">
             <span className="text-slate-400 font-medium">Assign to Clip:</span>
             <span className="text-blue-300 font-bold font-mono truncate max-w-[140px]">
               "{activeAnimation.name}"
@@ -108,7 +108,7 @@ export function FrameProperties({
           <div className="grid grid-cols-2 gap-1.5">
             <button
               onClick={() => onApplySelectedToAnimation?.(activeAnimation.id)}
-              className="btn bg-emerald-600/90 hover:bg-emerald-500 text-white text-[11px] py-1 px-2 rounded-md font-semibold flex items-center justify-center gap-1 shadow-sm transition-all"
+              className="btn bg-emerald-600/90 hover:bg-emerald-500 text-white h-7 text-xs rounded-md font-semibold flex items-center justify-center gap-1 shadow-sm transition-all"
               title={`Replace all frames in "${activeAnimation.name}" with selected ${selectedCount} frame(s)`}
             >
               <Check size={12} />
@@ -116,7 +116,7 @@ export function FrameProperties({
             </button>
             <button
               onClick={() => onAddSelectedToAnimation?.(activeAnimation.id)}
-              className="btn btn-primary text-[11px] py-1 px-2 rounded-md font-semibold flex items-center justify-center gap-1 shadow-sm"
+              className="btn btn-primary h-7 text-xs rounded-md font-semibold flex items-center justify-center gap-1 shadow-sm"
               title={`Append selected ${selectedCount} frame(s) to "${activeAnimation.name}"`}
             >
               <Plus size={12} />
@@ -134,7 +134,7 @@ export function FrameProperties({
             <div className="flex items-center gap-1.5">
               <button
                 onClick={onSelectAllFrames}
-                className="text-[11px] font-medium px-2 py-0.5 rounded bg-slate-800/80 hover:bg-slate-700 text-slate-300 border border-white/10 transition-colors"
+                className="h-6 text-[11px] font-medium px-2 rounded bg-slate-800/80 hover:bg-slate-700 text-slate-300 border border-white/10 transition-colors flex items-center"
                 title="Select all frames in active sheet (Ctrl+A)"
               >
                 Select All
@@ -142,7 +142,7 @@ export function FrameProperties({
               {selectedCount > 0 && (
                 <button
                   onClick={onDeselectAllFrames}
-                  className="text-[11px] font-medium px-2 py-0.5 rounded bg-slate-900/60 hover:bg-rose-500/20 text-slate-400 hover:text-rose-300 border border-white/10 transition-colors"
+                  className="h-6 text-[11px] font-medium px-2 rounded bg-slate-900/60 hover:bg-rose-500/20 text-slate-400 hover:text-rose-300 border border-white/10 transition-colors flex items-center"
                   title="Clear frame selection (Esc)"
                 >
                   Clear
@@ -181,7 +181,7 @@ export function FrameProperties({
                       onSelectFrame(frame.id);
                       setActiveTab('inspector');
                     }}
-                    className={`p-2 rounded-lg border cursor-pointer flex items-center justify-between transition-all ${
+                    className={`p-1.5 rounded-md border cursor-pointer flex items-center justify-between transition-all ${
                       isSelected
                         ? 'bg-blue-600/25 border-blue-500/60 shadow-sm shadow-blue-500/20'
                         : isInMulti
@@ -189,7 +189,7 @@ export function FrameProperties({
                         : 'bg-slate-900/60 hover:bg-slate-800/80 border-white/5'
                     }`}
                   >
-                    <div className="flex items-center gap-2 min-w-0">
+                    <div className="flex items-center gap-1.5 min-w-0">
                       {/* Selection Checkbox indicator */}
                       <span className="text-slate-400 hover:text-white flex-shrink-0">
                         {isInMulti || isSelected ? (
@@ -201,7 +201,7 @@ export function FrameProperties({
 
                       {/* Index Circle */}
                       <span
-                        className={`w-5 h-5 rounded-full text-[11px] font-mono font-bold flex items-center justify-center flex-shrink-0 ${
+                        className={`w-5 h-5 rounded-full text-[10px] font-mono font-bold flex items-center justify-center flex-shrink-0 ${
                           isSelected
                             ? 'bg-blue-500 text-white'
                             : isInMulti
@@ -212,19 +212,19 @@ export function FrameProperties({
                         {idx + 1}
                       </span>
 
-                      <div className="flex flex-col min-w-0">
-                        <div className="flex items-center gap-1.5">
+                      <div className="flex flex-col min-w-0 leading-tight">
+                        <div className="flex items-center gap-1">
                           <span className="text-xs font-semibold text-slate-200 truncate">
                             {frame.name || `frame_${idx + 1}`}
                           </span>
                           {frame.sheetId && sheetMap?.get(frame.sheetId) && (
-                            <span className="text-[8px] font-mono px-1 py-0 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30 truncate max-w-[45px]">
+                            <span className="badge badge-blue !h-4 !px-1 text-[9px] truncate max-w-[50px]">
                               {sheetMap.get(frame.sheetId).name}
                             </span>
                           )}
                         </div>
                         <span className="text-[10px] text-slate-400 font-mono">
-                          {frame.w}×{frame.h} px @ ({frame.x}, {frame.y})
+                          {frame.w}×{frame.h} px
                         </span>
                       </div>
                     </div>
@@ -237,7 +237,7 @@ export function FrameProperties({
                           onSelectFrame(frame.id);
                           onAddSelectedToAnimation?.(activeAnimation.id);
                         }}
-                        className="w-6 h-6 flex items-center justify-center rounded hover:bg-white/10 text-slate-400 hover:text-white transition-colors flex-shrink-0"
+                        className="btn-icon btn-icon-sm hover:bg-white/10 text-slate-400 hover:text-white transition-colors flex-shrink-0"
                         title={`Add this frame to "${activeAnimation.name}"`}
                       >
                         <Plus size={13} />
@@ -255,40 +255,40 @@ export function FrameProperties({
       {currentViewTab === 'inspector' && selectedFrame && (
         <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
           {/* Header Actions for selected frame */}
-          <div className="flex items-center justify-between pb-2 mb-2 border-b border-white/5 flex-shrink-0">
-            <div className="flex items-center gap-1.5">
-              <span className="w-5 h-5 rounded-full bg-blue-500 text-white text-[11px] font-mono font-bold flex items-center justify-center shadow flex-shrink-0">
+          <div className="flex items-center justify-between pb-1.5 mb-1.5 border-b border-white/5 flex-shrink-0">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <span className="w-5 h-5 rounded-full bg-blue-500 text-white text-[10px] font-mono font-bold flex items-center justify-center shadow flex-shrink-0">
                 {selectedIndex + 1}
               </span>
-              <span className="text-xs font-semibold text-slate-200 truncate max-w-[120px]">
+              <span className="text-xs font-semibold text-slate-200 truncate max-w-[130px]">
                 {selectedFrame.name || `frame_${selectedIndex + 1}`}
               </span>
             </div>
 
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1 flex-shrink-0">
               <button
                 onClick={() => onDuplicateFrame(selectedFrame.id)}
-                className="btn btn-secondary p-1.5 text-xs text-blue-400"
+                className="btn-icon btn-icon-sm bg-slate-900 border border-white/10 text-blue-400 hover:text-white"
                 title="Duplicate adjacent right (Ctrl+D)"
               >
-                <Copy size={13} />
+                <Copy size={12} />
               </button>
               <button
                 onClick={() => onDeleteFrame(selectedFrame.id)}
-                className="btn btn-danger p-1.5 text-xs"
+                className="btn-icon btn-icon-sm bg-slate-900 border border-white/10 text-slate-400 hover:text-rose-400 hover:bg-rose-500/20"
                 title="Delete frame (Delete)"
               >
-                <Trash2 size={13} />
+                <Trash2 size={12} />
               </button>
             </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto space-y-3 pr-0.5">
+          <div className="flex-1 overflow-y-auto space-y-2 pr-0.5">
             {/* Source Sheet Badge */}
             {sheetMap && selectedFrame.sheetId && sheetMap.get(selectedFrame.sheetId) && (
-              <div className="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-slate-950/80 border border-white/5 text-xs font-mono">
-                <span className="text-slate-400">Source Sheet:</span>
-                <span className="text-blue-300 font-bold">
+              <div className="flex items-center justify-between px-2 py-1 rounded-md bg-slate-950/80 border border-white/5 text-xs font-mono">
+                <span className="text-slate-400 text-[11px]">Source Sheet:</span>
+                <span className="text-blue-300 font-bold text-[11px]">
                   {sheetMap.get(selectedFrame.sheetId).name}
                 </span>
               </div>
@@ -306,7 +306,7 @@ export function FrameProperties({
             </div>
 
             {/* Position X, Y */}
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-2 gap-1.5">
               <div className="input-group">
                 <label className="input-label">Position X (px)</label>
                 <input
@@ -332,7 +332,7 @@ export function FrameProperties({
             </div>
 
             {/* Size Width, Height */}
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-2 gap-1.5">
               <div className="input-group">
                 <label className="input-label">Width (px)</label>
                 <input
@@ -358,21 +358,21 @@ export function FrameProperties({
             </div>
 
             {/* Pivot Anchor Presets */}
-            <div className="pt-1 border-t border-white/5">
-              <label className="input-label flex items-center justify-between mb-2">
-                <span className="flex items-center gap-1">
-                  <Target size={12} className="text-amber-400" />
+            <div className="pt-1 border-t border-white/5 space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="input-label !m-0 flex items-center gap-1">
+                  <Target size={11} className="text-amber-400" />
                   <span>Pivot Anchor</span>
                 </span>
-                <span className="font-mono text-[10px] text-amber-400 font-bold">
+                <span className="badge badge-amber !h-4 text-[9px]">
                   {(selectedFrame.pivotX ?? 0.5).toFixed(2)}, {(selectedFrame.pivotY ?? 0.5).toFixed(2)}
                 </span>
-              </label>
+              </div>
 
-              <div className="grid grid-cols-2 gap-1.5 mb-2">
+              <div className="grid grid-cols-2 gap-1">
                 <button
                   onClick={() => onUpdateFrame(selectedFrame.id, { pivotX: 0.5, pivotY: 0.5 })}
-                  className={`px-2 py-1 text-xs rounded border transition-colors ${
+                  className={`h-6 px-1.5 text-[11px] font-medium rounded border transition-colors ${
                     (selectedFrame.pivotX ?? 0.5) === 0.5 && (selectedFrame.pivotY ?? 0.5) === 0.5
                       ? 'bg-amber-500/25 border-amber-500/60 text-amber-300 font-bold'
                       : 'bg-slate-900/90 border-white/10 text-slate-400 hover:text-white'
@@ -382,7 +382,7 @@ export function FrameProperties({
                 </button>
                 <button
                   onClick={() => onUpdateFrame(selectedFrame.id, { pivotX: 0.5, pivotY: 1.0 })}
-                  className={`px-2 py-1 text-xs rounded border transition-colors ${
+                  className={`h-6 px-1.5 text-[11px] font-medium rounded border transition-colors ${
                     (selectedFrame.pivotX ?? 0.5) === 0.5 && (selectedFrame.pivotY ?? 0.5) === 1.0
                       ? 'bg-amber-500/25 border-amber-500/60 text-amber-300 font-bold'
                       : 'bg-slate-900/90 border-white/10 text-slate-400 hover:text-white'
@@ -392,7 +392,7 @@ export function FrameProperties({
                 </button>
                 <button
                   onClick={() => onUpdateFrame(selectedFrame.id, { pivotX: 0.5, pivotY: 0.0 })}
-                  className={`px-2 py-1 text-xs rounded border transition-colors ${
+                  className={`h-6 px-1.5 text-[11px] font-medium rounded border transition-colors ${
                     (selectedFrame.pivotX ?? 0.5) === 0.5 && (selectedFrame.pivotY ?? 0.5) === 0.0
                       ? 'bg-amber-500/25 border-amber-500/60 text-amber-300 font-bold'
                       : 'bg-slate-900/90 border-white/10 text-slate-400 hover:text-white'
@@ -402,7 +402,7 @@ export function FrameProperties({
                 </button>
                 <button
                   onClick={() => onUpdateFrame(selectedFrame.id, { pivotX: 0.0, pivotY: 0.0 })}
-                  className={`px-2 py-1 text-xs rounded border transition-colors ${
+                  className={`h-6 px-1.5 text-[11px] font-medium rounded border transition-colors ${
                     (selectedFrame.pivotX ?? 0.5) === 0.0 && (selectedFrame.pivotY ?? 0.5) === 0.0
                       ? 'bg-amber-500/25 border-amber-500/60 text-amber-300 font-bold'
                       : 'bg-slate-900/90 border-white/10 text-slate-400 hover:text-white'
@@ -413,27 +413,27 @@ export function FrameProperties({
               </div>
 
               {/* Fine tuning Pivot */}
-              <div className="grid grid-cols-2 gap-2">
-                <div className="input-group mb-0">
-                  <label className="text-[10px] text-slate-400 font-mono mb-1">Pivot X (0-1)</label>
+              <div className="grid grid-cols-2 gap-1.5">
+                <div className="input-group">
+                  <label className="input-label">Pivot X (0-1)</label>
                   <input
                     type="number"
                     step="0.05"
                     min="0"
                     max="1"
-                    className="input-field text-xs py-1"
+                    className="input-field"
                     value={selectedFrame.pivotX ?? 0.5}
                     onChange={(e) => onUpdateFrame(selectedFrame.id, { pivotX: parseFloat(e.target.value) || 0 })}
                   />
                 </div>
-                <div className="input-group mb-0">
-                  <label className="text-[10px] text-slate-400 font-mono mb-1">Pivot Y (0-1)</label>
+                <div className="input-group">
+                  <label className="input-label">Pivot Y (0-1)</label>
                   <input
                     type="number"
                     step="0.05"
                     min="0"
                     max="1"
-                    className="input-field text-xs py-1"
+                    className="input-field"
                     value={selectedFrame.pivotY ?? 0.5}
                     onChange={(e) => onUpdateFrame(selectedFrame.id, { pivotY: parseFloat(e.target.value) || 0 })}
                   />
@@ -442,30 +442,30 @@ export function FrameProperties({
             </div>
 
             {/* Actions & Reordering */}
-            <div className="pt-2.5 border-t border-white/10 space-y-2">
+            <div className="pt-2 border-t border-white/10 space-y-1.5">
               <button
                 onClick={() => onDuplicateFrame(selectedFrame.id)}
-                className="btn btn-primary w-full text-xs justify-center shadow-lg shadow-blue-500/20"
+                className="btn btn-primary w-full h-7 text-xs justify-center shadow-md shadow-blue-500/20"
               >
-                <Copy size={13} />
+                <Copy size={12} />
                 <span>Duplicate Right</span>
-                <kbd className="ml-1">Ctrl+D</kbd>
+                <kbd className="ml-1 text-[9px] py-0 px-1">Ctrl+D</kbd>
               </button>
 
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-2 gap-1.5">
                 <button
                   onClick={() => onMoveFrameOrder(selectedFrame.id, -1)}
                   disabled={selectedIndex === 0}
-                  className="btn btn-secondary text-xs justify-center disabled:opacity-40"
+                  className="btn btn-secondary h-7 text-xs justify-center disabled:opacity-40"
                 >
-                  <ArrowUp size={13} /> <span>Move Up</span>
+                  <ArrowUp size={12} /> <span>Move Up</span>
                 </button>
                 <button
                   onClick={() => onMoveFrameOrder(selectedFrame.id, 1)}
                   disabled={selectedIndex === frames.length - 1}
-                  className="btn btn-secondary text-xs justify-center disabled:opacity-40"
+                  className="btn btn-secondary h-7 text-xs justify-center disabled:opacity-40"
                 >
-                  <ArrowDown size={13} /> <span>Move Down</span>
+                  <ArrowDown size={12} /> <span>Move Down</span>
                 </button>
               </div>
             </div>

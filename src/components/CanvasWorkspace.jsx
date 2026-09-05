@@ -318,7 +318,7 @@ export function CanvasWorkspace({
                     setEditingSheetId(sheet.id);
                     setEditingSheetName(sheet.name);
                   }}
-                  className={`sheet-tab group flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-mono transition-all cursor-pointer border ${
+                  className={`sheet-tab group flex items-center gap-1.5 h-7 px-2.5 rounded-md text-xs font-mono transition-all cursor-pointer border ${
                     isActive
                       ? 'bg-blue-600/30 text-blue-300 border-blue-500/60 shadow-sm shadow-blue-500/20 font-bold'
                       : 'bg-slate-900/70 text-slate-400 border-white/5 hover:border-white/20 hover:text-slate-200'
@@ -347,7 +347,7 @@ export function CanvasWorkspace({
                         }
                       }}
                       onClick={(e) => e.stopPropagation()}
-                      className="bg-slate-950 border border-blue-500 text-white px-1 py-0 text-xs rounded w-20 outline-none"
+                      className="bg-slate-950 border border-blue-500 text-white px-1.5 h-5 text-xs rounded w-20 outline-none font-mono"
                     />
                   ) : (
                     <span className="truncate max-w-[110px]" title={sheet.name}>
@@ -355,8 +355,8 @@ export function CanvasWorkspace({
                     </span>
                   )}
                   <span
-                    className={`text-[9px] px-1 py-0 rounded ${
-                      isActive ? 'bg-blue-500/30 text-blue-200' : 'bg-slate-800 text-slate-500'
+                    className={`badge ${
+                      isActive ? 'badge-blue' : 'bg-slate-800 text-slate-400'
                     }`}
                   >
                     {sheetFrameCount}
@@ -385,7 +385,7 @@ export function CanvasWorkspace({
                   e.stopPropagation();
                   setIsAddSheetMenuOpen(!isAddSheetMenuOpen);
                 }}
-                className="btn btn-secondary text-xs py-1 px-2.5 flex items-center gap-1 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10"
+                className="btn btn-secondary h-7 px-2.5 text-xs flex items-center gap-1 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10"
                 title="Add new Sprite Sheet (Upload or Presets)"
               >
                 <Plus size={12} />
@@ -469,27 +469,27 @@ export function CanvasWorkspace({
       >
         {/* Canvas Viewport Controls Header Bar */}
         {imageSrc && (
-          <div className="absolute top-3 left-3 right-3 z-20 flex items-center justify-between gap-2 pointer-events-none flex-wrap">
+          <div className="absolute top-2 left-2 right-2 z-20 flex items-center justify-between gap-1.5 pointer-events-none">
           {/* Left Action Buttons */}
           <div
-            className="flex items-center gap-1.5 p-1.5 rounded-lg text-xs pointer-events-auto shadow-lg"
+            className="flex items-center gap-1 p-1 rounded-lg text-xs pointer-events-auto shadow-md"
             style={{ background: 'rgba(15, 23, 42, 0.92)', backdropFilter: 'blur(10px)', border: '1px solid rgba(255,255,255,0.12)' }}
           >
             <button
               onClick={onAutoDetect}
-              className="btn btn-secondary text-xs px-2.5 py-1 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10"
+              className="btn btn-secondary h-7 text-xs px-2 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10"
               title="Auto-detect non-transparent sprite bounds"
             >
-              <Sparkles size={13} className="text-emerald-400" />
+              <Sparkles size={12} className="text-emerald-400" />
               <span>Auto Detect</span>
             </button>
 
             <button
               onClick={onOpenQuickGrid}
-              className="btn btn-secondary text-xs px-2.5 py-1 text-blue-400 border-blue-500/30 hover:bg-blue-500/10"
+              className="btn btn-secondary h-7 text-xs px-2 text-blue-400 border-blue-500/30 hover:bg-blue-500/10"
               title="Quick grid slice by rows/cols or pixel size"
             >
-              <Grid size={13} className="text-blue-400" />
+              <Grid size={12} className="text-blue-400" />
               <span>Grid Slice</span>
             </button>
 
@@ -498,34 +498,34 @@ export function CanvasWorkspace({
             {/* Display Toggles */}
             <button
               onClick={() => setShowNumbers(!showNumbers)}
-              className={`px-2 py-1 rounded text-xs flex items-center gap-1 transition-all ${
+              className={`h-7 px-2 rounded text-xs flex items-center gap-1 transition-all ${
                 showNumbers
-                  ? 'bg-blue-500/20 text-blue-300 border border-blue-500/40 font-medium'
+                  ? 'bg-blue-500/20 text-blue-300 border border-blue-500/40 font-semibold'
                   : 'text-slate-400 hover:text-white border border-transparent hover:bg-slate-800'
               }`}
               title="Toggle frame index numbers"
             >
-              <Hash size={13} />
+              <Hash size={12} />
               <span className="text-[11px] font-mono hidden sm:inline">#{visibleFrames.length}</span>
             </button>
 
             <button
               onClick={() => setShowPivot(!showPivot)}
-              className={`px-2 py-1 rounded text-xs flex items-center gap-1 transition-all ${
+              className={`h-7 px-2 rounded text-xs flex items-center gap-1 transition-all ${
                 showPivot
-                  ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 font-medium'
+                  ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 font-semibold'
                   : 'text-slate-400 hover:text-white border border-transparent hover:bg-slate-800'
               }`}
               title="Toggle pivot anchor point"
             >
-              <Target size={13} />
+              <Target size={12} />
               <span className="text-[11px] hidden sm:inline">Pivot</span>
             </button>
           </div>
 
           {/* Right Zoom Controls */}
           <div
-            className="flex items-center gap-1 p-1.5 rounded-lg pointer-events-auto shadow-lg ml-auto"
+            className="flex items-center gap-0.5 p-1 rounded-lg pointer-events-auto shadow-md ml-auto flex-shrink-0"
             style={{ background: 'rgba(15, 23, 42, 0.92)', backdropFilter: 'blur(10px)', border: '1px solid rgba(255,255,255,0.12)' }}
           >
             {/* Quick Integer Zoom presets for crisp pixel art */}
@@ -534,7 +534,7 @@ export function CanvasWorkspace({
                 <button
                   key={z}
                   onClick={() => setZoom(z)}
-                  className={`px-1.5 py-0.5 text-[10px] font-mono rounded ${
+                  className={`h-5 px-1.5 text-[10px] font-mono rounded ${
                     Math.abs(zoom - z) < 0.05
                       ? 'bg-blue-600 text-white font-bold'
                       : 'text-slate-400 hover:text-white'
@@ -547,45 +547,45 @@ export function CanvasWorkspace({
             </div>
 
             <button
-              className="btn-icon"
+              className="btn-icon btn-icon-sm"
               title="Zoom Out (-)"
               onClick={() => setZoom(z => Math.max(z * 0.8, 0.15))}
             >
-              <ZoomOut size={15} />
+              <ZoomOut size={13} />
             </button>
-            <span className="font-mono text-xs text-slate-200 px-1 font-semibold min-w-[42px] text-center">
+            <span className="font-mono text-[11px] text-slate-200 px-1 font-semibold min-w-[38px] text-center">
               {Math.round(zoom * 100)}%
             </span>
             <button
-              className="btn-icon"
+              className="btn-icon btn-icon-sm"
               title="Zoom In (+)"
               onClick={() => setZoom(z => Math.min(z * 1.25, 15))}
             >
-              <ZoomIn size={15} />
+              <ZoomIn size={13} />
             </button>
             <button
-              className="btn-icon"
+              className="btn-icon btn-icon-sm"
               title="Fit to Screen"
               onClick={() => {
                 if (containerRef.current && imageDimensions.width) {
-                  const scale = Math.min(
-                    (containerRef.current.clientWidth - 80) / imageDimensions.width,
-                    (containerRef.current.clientHeight - 80) / imageDimensions.height
-                  );
-                  const fitZoom = Math.min(Math.max(scale, 0.2), 6);
-                  setZoom(fitZoom);
+                  const containerW = containerRef.current.clientWidth;
+                  const containerH = containerRef.current.clientHeight;
+                  const scaleX = (containerW - 80) / imageDimensions.width;
+                  const scaleY = (containerH - 80) / imageDimensions.height;
+                  const fitZoom = Math.min(scaleX, scaleY);
+                  setZoom(Math.round(fitZoom * 10) / 10);
                   setPan({
-                    x: (containerRef.current.clientWidth - imageDimensions.width * fitZoom) / 2,
-                    y: (containerRef.current.clientHeight - imageDimensions.height * fitZoom) / 2
+                    x: Math.max(20, (containerW - imageDimensions.width * fitZoom) / 2),
+                    y: Math.max(20, (containerH - imageDimensions.height * fitZoom) / 2)
                   });
                 }
               }}
             >
-              <Maximize size={15} />
+              <Maximize size={13} />
             </button>
           </div>
         </div>
-      )}
+        )}
 
       {/* Main Render Area */}
       {imageSrc ? (

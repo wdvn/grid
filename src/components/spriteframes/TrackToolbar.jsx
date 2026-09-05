@@ -126,7 +126,7 @@ export function TrackToolbar({
           title={`Replace animation frames with currently selected ${selectedCount} frame(s)`}
         >
           <Check size={12} className="text-white" />
-          <span>Apply Selected{selectedCount > 0 ? ` (${selectedCount})` : ''}</span>
+          <span>Apply<span className="hidden xl:inline"> Selected</span>{selectedCount > 0 ? ` (${selectedCount})` : ''}</span>
         </button>
 
         {/* Add Selected: Appends selected frames to animation */}

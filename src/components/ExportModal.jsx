@@ -110,46 +110,46 @@ export function ExportModal({
         <div className="flex border-b border-white/10 px-4 bg-slate-900/60 overflow-x-auto">
           <button
             onClick={() => setActiveTab('json')}
-            className={`flex items-center gap-1.5 px-3 py-3 text-xs font-bold border-b-2 whitespace-nowrap transition-colors ${
+            className={`flex items-center gap-1.5 px-3 py-2 text-xs font-bold border-b-2 whitespace-nowrap transition-colors ${
               activeTab === 'json'
                 ? 'border-blue-500 text-blue-400'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
           >
-            <FileJson size={15} /> JSON Atlas
+            <FileJson size={14} /> JSON Atlas
           </button>
 
           <button
             onClick={() => setActiveTab('state_graph')}
-            className={`flex items-center gap-1.5 px-3 py-3 text-xs font-bold border-b-2 whitespace-nowrap transition-colors ${
+            className={`flex items-center gap-1.5 px-3 py-2 text-xs font-bold border-b-2 whitespace-nowrap transition-colors ${
               activeTab === 'state_graph'
                 ? 'border-cyan-500 text-cyan-400'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
           >
-            <Network size={15} /> State Graph (Unity / Godot)
+            <Network size={14} /> State Graph (Unity / Godot)
           </button>
 
           <button
             onClick={() => setActiveTab('zip')}
-            className={`flex items-center gap-1.5 px-3 py-3 text-xs font-bold border-b-2 whitespace-nowrap transition-colors ${
+            className={`flex items-center gap-1.5 px-3 py-2 text-xs font-bold border-b-2 whitespace-nowrap transition-colors ${
               activeTab === 'zip'
                 ? 'border-emerald-500 text-emerald-400'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
           >
-            <Archive size={15} /> PNG Frames ZIP ({frames.length})
+            <Archive size={14} /> PNG Frames ZIP ({frames.length})
           </button>
 
           <button
             onClick={() => setActiveTab('project')}
-            className={`flex items-center gap-1.5 px-3 py-3 text-xs font-bold border-b-2 whitespace-nowrap transition-colors ${
+            className={`flex items-center gap-1.5 px-3 py-2 text-xs font-bold border-b-2 whitespace-nowrap transition-colors ${
               activeTab === 'project'
                 ? 'border-purple-500 text-purple-400'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
           >
-            <Save size={15} /> Save Project (.json)
+            <Save size={14} /> Save Project (.json)
           </button>
         </div>
 
@@ -176,7 +176,7 @@ export function ExportModal({
               <textarea
                 readOnly
                 value={jsonContent}
-                className="w-full h-64 bg-slate-950 text-slate-300 font-mono text-xs p-3 rounded-lg border border-white/10 focus:outline-none select-all"
+                className="w-full h-48 xl:h-64 bg-slate-950 text-slate-300 font-mono text-xs p-3 rounded-lg border border-white/10 focus:outline-none select-all"
               />
             </div>
           )}
@@ -193,7 +193,7 @@ export function ExportModal({
                   <div className="flex items-center gap-1 bg-slate-900 p-0.5 rounded border border-white/10">
                     <button
                       onClick={() => setEngineFormat('unity')}
-                      className={`px-2.5 py-1 text-xs font-semibold rounded transition-colors ${
+                      className={`h-7 px-2.5 text-xs font-semibold rounded flex items-center justify-center transition-colors ${
                         engineFormat === 'unity'
                           ? 'bg-cyan-600 text-white shadow'
                           : 'text-slate-400 hover:text-white'
@@ -203,7 +203,7 @@ export function ExportModal({
                     </button>
                     <button
                       onClick={() => setEngineFormat('godot')}
-                      className={`px-2.5 py-1 text-xs font-semibold rounded transition-colors ${
+                      className={`h-7 px-2.5 text-xs font-semibold rounded flex items-center justify-center transition-colors ${
                         engineFormat === 'godot'
                           ? 'bg-cyan-600 text-white shadow'
                           : 'text-slate-400 hover:text-white'
@@ -213,7 +213,7 @@ export function ExportModal({
                     </button>
                     <button
                       onClick={() => setEngineFormat('universal')}
-                      className={`px-2.5 py-1 text-xs font-semibold rounded transition-colors ${
+                      className={`h-7 px-2.5 text-xs font-semibold rounded flex items-center justify-center transition-colors ${
                         engineFormat === 'universal'
                           ? 'bg-cyan-600 text-white shadow'
                           : 'text-slate-400 hover:text-white'
@@ -250,7 +250,7 @@ export function ExportModal({
               <textarea
                 readOnly
                 value={stateGraphExportContent}
-                className="w-full h-56 bg-slate-950 text-slate-300 font-mono text-xs p-3 rounded-lg border border-white/10 focus:outline-none select-all"
+                className="w-full h-44 xl:h-56 bg-slate-950 text-slate-300 font-mono text-xs p-3 rounded-lg border border-white/10 focus:outline-none select-all"
               />
             </div>
           )}

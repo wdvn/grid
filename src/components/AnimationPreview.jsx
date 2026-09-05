@@ -18,7 +18,8 @@ import {
   ChevronUp,
   ChevronDown,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Wind
 } from 'lucide-react';
 import { CharacterStateMachine, createDefaultCharacterGraph } from '../utils/animationGraph';
 import { StateGraphModal } from './StateGraphModal';
@@ -56,6 +57,12 @@ export function AnimationPreview({
   const [isLooping, setIsLooping] = useState(true);
   const [onionSkin, setOnionSkin] = useState(false);
   const [bgStyle, setBgStyle] = useState('checkerboard'); // 'checkerboard' | 'dark' | 'light' | 'green'
+  const [motionBlur, setMotionBlur] = useState(false); // Optional motion blur / after-image trail in character mode
+  const motionBlurRef = useRef(false);
+  useEffect(() => {
+    motionBlurRef.current = motionBlur;
+  }, [motionBlur]);
+  const trailHistoryRef = useRef([]);
   const [zoomScale, setZoomScale] = useState(3); // 2x, 3x, 4x, 6x
 
   // Active animation from Godot SpriteFrames animations list
@@ -379,6 +386,39 @@ export function AnimationPreview({
 
       // Draw Sprite with 100% crisp pixel rendering and no ghost artifacts
       const frameImg = (activeFrame?.sheetId && sheetMap?.get(activeFrame.sheetId)?.imageElement) || imageElement;
+
+      // Optional Motion Blur / After-Image Trail (Only active if toggled ON in Character Mode)
+      if (motionBlurRef.current && !isStationary) {
+        const trail = trailHistoryRef.current;
+        for (let i = 0; i < trail.length; i++) {
+          const t = trail[i];
+          const alpha = (i + 1) * (0.32 / (trail.length + 1));
+          ctx.globalAlpha = alpha;
+          ctx.drawImage(
+            t.img,
+            t.frame.x,
+            t.frame.y,
+            t.frame.w,
+            t.frame.h,
+            t.x,
+            t.y,
+            drawW,
+            drawH
+          );
+        }
+
+        const last = trail[trail.length - 1];
+        const moved = !last || Math.hypot(last.x - drawX, last.y - drawY) > 2;
+        if (moved) {
+          trail.push({ x: drawX, y: drawY, frame: activeFrame, img: frameImg });
+          if (trail.length > 4) trail.shift();
+        } else if (trail.length > 0) {
+          trail.shift();
+        }
+      } else {
+        trailHistoryRef.current = [];
+      }
+
       ctx.globalAlpha = 1.0;
       ctx.drawImage(
         frameImg,
@@ -587,11 +627,12 @@ export function AnimationPreview({
   return (
     <div className="glass-panel p-3 flex flex-col h-full overflow-hidden select-none">
       {/* Header & Mode Selector */}
+      {/* Header Bar with Mode Switcher Tabs */}
       <div className="flex items-center justify-between pb-2 border-b border-white/10 flex-shrink-0">
         <div className="flex items-center gap-1 bg-slate-900/80 p-0.5 rounded-lg border border-white/10">
           <button
             onClick={() => setPreviewMode('character')}
-            className={`flex items-center gap-1 px-2.5 py-1 text-xs rounded font-bold transition-all ${
+            className={`h-7 flex items-center gap-1.5 px-2.5 text-xs rounded font-semibold transition-all ${
               previewMode === 'character'
                 ? 'bg-blue-600 text-white shadow'
                 : 'text-slate-400 hover:text-white'
@@ -604,7 +645,7 @@ export function AnimationPreview({
 
           <button
             onClick={() => setPreviewMode('clip')}
-            className={`flex items-center gap-1 px-2.5 py-1 text-xs rounded font-bold transition-all ${
+            className={`h-7 flex items-center gap-1.5 px-2.5 text-xs rounded font-semibold transition-all ${
               previewMode === 'clip'
                 ? 'bg-blue-600 text-white shadow'
                 : 'text-slate-400 hover:text-white'
@@ -620,27 +661,27 @@ export function AnimationPreview({
         {previewMode === 'character' ? (
           <div className="flex items-center gap-1.5">
             <span
-              className={`text-[10px] font-mono px-2 py-0.5 rounded font-bold uppercase tracking-wider border shadow-sm ${
+              className={`badge ${
                 activeStateId === 'Action'
-                  ? 'bg-amber-500/20 text-amber-400 border-amber-500/30 animate-pulse'
+                  ? 'badge-amber animate-pulse'
                   : activeStateId === 'Run'
-                  ? 'bg-blue-500/20 text-blue-400 border-blue-500/30'
-                  : 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+                  ? 'badge-blue'
+                  : 'badge-emerald'
               }`}
             >
               {activeStateId}
             </span>
             <button
               onClick={() => setIsGraphModalOpen(true)}
-              className="btn btn-secondary px-2 py-0.5 text-[10px] font-bold text-blue-400 border-blue-500/30 hover:bg-blue-500/10 flex items-center gap-1"
+              className="btn btn-secondary h-7 px-2 text-xs font-semibold text-blue-400 border-blue-500/30 hover:bg-blue-500/10 flex items-center gap-1"
               title="Open Animation Graph & State Machine Diagram"
             >
-              <Network size={11} />
+              <Network size={12} />
               <span>Graph</span>
             </button>
           </div>
         ) : (
-          <span className="text-[11px] font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 font-semibold">
+          <span className="badge badge-emerald">
             {activeFrames.length > 0 ? `${currentFrameIndex + 1} / ${activeFrames.length}` : '0 / 0'}
           </span>
         )}
@@ -847,16 +888,16 @@ export function AnimationPreview({
                     stateMachineRef.current.setParameters({ isAttacking: true });
                   }
                 }}
-                className={`action-space-btn ${activeStateId === 'Action' ? 'active' : ''}`}
+                className={`action-space-btn h-7 ${activeStateId === 'Action' ? 'active' : ''}`}
                 title="Trigger Action State (Space)"
               >
-                <Zap size={14} className={activeStateId === 'Action' ? 'fill-current' : 'text-amber-400'} />
+                <Zap size={13} className={activeStateId === 'Action' ? 'fill-current' : 'text-amber-400'} />
                 <span>Action (Space)</span>
               </button>
 
               <button
                 onClick={togglePlay}
-                className="btn btn-secondary px-2.5 py-1.5 text-xs flex items-center gap-1"
+                className="btn btn-secondary h-7 px-2.5 text-xs flex items-center gap-1"
                 title={isPlaying ? 'Pause Animation' : 'Play Animation'}
               >
                 {isPlaying ? <Pause size={13} /> : <Play size={13} />}
@@ -926,10 +967,10 @@ export function AnimationPreview({
           </div>
         )}
 
-        {/* FPS Slider & Background Mode */}
-        <div className="flex items-center justify-between gap-2 px-1">
-          <div className="flex items-center gap-2 flex-1">
-            <span className="text-[10px] font-mono text-slate-400 w-12 flex-shrink-0">
+        {/* FPS Slider, Motion Blur & Background Mode */}
+        <div className="h-7 flex items-center justify-between gap-2 px-0.5">
+          <div className="flex items-center gap-1.5 flex-1 min-w-0">
+            <span className="text-[10px] font-mono text-slate-400 w-11 flex-shrink-0">
               {fps} FPS
             </span>
             <input
@@ -942,30 +983,48 @@ export function AnimationPreview({
             />
           </div>
 
-          {/* Background Toggle */}
-          <div className="flex items-center gap-1 bg-slate-900 p-0.5 rounded border border-white/10">
-            <button
-              onClick={() => setBgStyle('checkerboard')}
-              className={`w-4 h-4 rounded bg-checkerboard border border-white/20 transition-all ${
-                bgStyle === 'checkerboard' ? 'ring-2 ring-blue-400 opacity-100' : 'opacity-50 hover:opacity-100'
-              }`}
-              title="Checkerboard background (Transparent)"
-            />
-            <button
-              onClick={() => setBgStyle('dark')}
-              className={`w-4 h-4 rounded bg-slate-950 ${bgStyle === 'dark' ? 'ring-1 ring-blue-400' : 'opacity-60'}`}
-              title="Dark background"
-            />
-            <button
-              onClick={() => setBgStyle('light')}
-              className={`w-4 h-4 rounded bg-slate-200 ${bgStyle === 'light' ? 'ring-1 ring-blue-400' : 'opacity-60'}`}
-              title="Light background"
-            />
-            <button
-              onClick={() => setBgStyle('green')}
-              className={`w-4 h-4 rounded bg-emerald-700 ${bgStyle === 'green' ? 'ring-1 ring-blue-400' : 'opacity-60'}`}
-              title="Green screen background"
-            />
+          {/* Motion Blur (Character Mode) & Background Toggle */}
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            {previewMode === 'character' && (
+              <button
+                onClick={() => setMotionBlur((prev) => !prev)}
+                className={`h-6 flex items-center gap-1 px-1.5 text-[10px] font-mono rounded border transition-all ${
+                  motionBlur
+                    ? 'bg-blue-500/20 border-blue-400/60 text-blue-300 font-semibold shadow-sm'
+                    : 'bg-slate-900 border-white/10 text-slate-400 hover:text-slate-200'
+                }`}
+                title="Toggle Motion Blur / Ghost Trail Effect in Character Mode"
+              >
+                <Wind size={11} className={motionBlur ? 'text-blue-400' : 'text-slate-500'} />
+                <span>Blur</span>
+              </button>
+            )}
+
+            {/* Background Toggle */}
+            <div className="flex items-center gap-1 bg-slate-900 p-0.5 rounded border border-white/10">
+              <button
+                onClick={() => setBgStyle('checkerboard')}
+                className={`w-3.5 h-3.5 rounded bg-checkerboard border border-white/20 transition-all ${
+                  bgStyle === 'checkerboard' ? 'ring-2 ring-blue-400 opacity-100' : 'opacity-50 hover:opacity-100'
+                }`}
+                title="Checkerboard background (Transparent)"
+              />
+              <button
+                onClick={() => setBgStyle('dark')}
+                className={`w-3.5 h-3.5 rounded bg-slate-950 ${bgStyle === 'dark' ? 'ring-1 ring-blue-400' : 'opacity-60'}`}
+                title="Dark background"
+              />
+              <button
+                onClick={() => setBgStyle('light')}
+                className={`w-3.5 h-3.5 rounded bg-slate-200 ${bgStyle === 'light' ? 'ring-1 ring-blue-400' : 'opacity-60'}`}
+                title="Light background"
+              />
+              <button
+                onClick={() => setBgStyle('green')}
+                className={`w-3.5 h-3.5 rounded bg-emerald-700 ${bgStyle === 'green' ? 'ring-1 ring-blue-400' : 'opacity-60'}`}
+                title="Green screen background"
+              />
+            </div>
           </div>
         </div>
       </div>

@@ -133,7 +133,7 @@ export function ImportAtlasModal({
         <div className="flex border-b border-white/10 px-4 bg-slate-900/60 overflow-x-auto">
           <button
             onClick={() => setActiveTab('file')}
-            className={`flex items-center gap-1.5 px-3 py-3 text-xs font-bold border-b-2 whitespace-nowrap transition-colors ${
+            className={`flex items-center gap-1.5 px-3 py-2 text-xs font-bold border-b-2 whitespace-nowrap transition-colors ${
               activeTab === 'file'
                 ? 'border-emerald-500 text-emerald-400'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
@@ -144,7 +144,7 @@ export function ImportAtlasModal({
 
           <button
             onClick={() => setActiveTab('paste')}
-            className={`flex items-center gap-1.5 px-3 py-3 text-xs font-bold border-b-2 whitespace-nowrap transition-colors ${
+            className={`flex items-center gap-1.5 px-3 py-2 text-xs font-bold border-b-2 whitespace-nowrap transition-colors ${
               activeTab === 'paste'
                 ? 'border-blue-500 text-blue-400'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
@@ -155,7 +155,7 @@ export function ImportAtlasModal({
 
           <button
             onClick={() => setActiveTab('sample')}
-            className={`flex items-center gap-1.5 px-3 py-3 text-xs font-bold border-b-2 whitespace-nowrap transition-colors ${
+            className={`flex items-center gap-1.5 px-3 py-2 text-xs font-bold border-b-2 whitespace-nowrap transition-colors ${
               activeTab === 'sample'
                 ? 'border-amber-500 text-amber-400'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
@@ -166,7 +166,7 @@ export function ImportAtlasModal({
         </div>
 
         {/* Modal Body */}
-        <div className="modal-body space-y-4 max-h-[70vh] overflow-y-auto">
+        <div className="modal-body space-y-4">
           {/* TAB 1: File Upload */}
           {activeTab === 'file' && (
             <div className="space-y-3">

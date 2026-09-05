@@ -24,22 +24,22 @@ export function Header({
     <header className="app-header">
       {/* Brand Logo & Name */}
       <div className="brand-logo">
-        <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-blue-500/20 text-blue-400 border border-blue-500/30 shadow-md">
-          <Layers size={18} />
+        <div className="flex items-center justify-center w-7 h-7 rounded-md bg-blue-500/20 text-blue-400 border border-blue-500/30 shadow-sm flex-shrink-0">
+          <Layers size={16} />
         </div>
-        <div className="flex flex-col">
-          <div className="flex items-center gap-2">
-            <span className="brand-text">G.R.I.D.</span>
+        <div className="flex flex-col justify-center leading-tight">
+          <div className="flex items-center gap-1.5">
+            <span className="brand-text text-sm font-bold tracking-tight">G.R.I.D.</span>
             <span className="brand-badge">PRO</span>
           </div>
-          <span className="text-[10px] text-slate-400 font-normal tracking-wide">
+          <span className="text-[9px] text-slate-400 font-normal tracking-wide hidden sm:inline">
             Graphics Rendering for Independent Developers
           </span>
         </div>
       </div>
 
       {/* Action Buttons Toolbar */}
-      <div className="flex items-center gap-2.5">
+      <div className="flex items-center gap-1.5">
         {/* Sample Sprites Dropdown */}
         <div className="dropdown" onMouseLeave={() => setIsDropdownOpen(false)}>
           <button
