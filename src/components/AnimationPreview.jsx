@@ -30,16 +30,26 @@ export function AnimationPreview({
   onSelectFrame,
   animations = [],
   selectedAnimationId,
-  onSelectAnimation
+  onSelectAnimation,
+  previewMode: controlledPreviewMode,
+  onPreviewModeChange,
+  isPlaying: controlledIsPlaying,
+  onTogglePlay,
+  currentFrameIndex: controlledFrameIndex,
+  onFrameIndexChange
 }) {
   const canvasRef = useRef(null);
 
   // Preview Mode: 'clip' (single animation clip) or 'character' (interactive state machine)
-  const [previewMode, setPreviewMode] = useState('character');
+  const [localPreviewMode, setLocalPreviewMode] = useState('character');
+  const previewMode = controlledPreviewMode !== undefined ? controlledPreviewMode : localPreviewMode;
+  const setPreviewMode = onPreviewModeChange || setLocalPreviewMode;
   const [isGraphModalOpen, setIsGraphModalOpen] = useState(false);
 
   // Playback settings
-  const [isPlaying, setIsPlaying] = useState(true);
+  const [localIsPlaying, setLocalIsPlaying] = useState(true);
+  const isPlaying = controlledIsPlaying !== undefined ? controlledIsPlaying : localIsPlaying;
+  const togglePlay = onTogglePlay || (() => setLocalIsPlaying((p) => !p));
   const [fps, setFps] = useState(10);
   const [isLooping, setIsLooping] = useState(true);
   const [onionSkin, setOnionSkin] = useState(false);
@@ -74,14 +84,16 @@ export function AnimationPreview({
     return frames;
   }, [activeAnimation, frames]);
 
-  const [currentFrameIndex, setCurrentFrameIndex] = useState(0);
+  const [localFrameIndex, setLocalFrameIndex] = useState(0);
+  const currentFrameIndex = controlledFrameIndex !== undefined ? controlledFrameIndex : localFrameIndex;
+  const setFrameIndex = onFrameIndexChange || setLocalFrameIndex;
 
   // Keep frame index within active frames range
   useEffect(() => {
-    if (currentFrameIndex >= activeFrames.length) {
-      setCurrentFrameIndex(0);
+    if (currentFrameIndex >= activeFrames.length && activeFrames.length > 0) {
+      setFrameIndex(0);
     }
-  }, [activeFrames.length, currentFrameIndex]);
+  }, [activeFrames.length, currentFrameIndex, setFrameIndex]);
 
   // ==========================================
   // CHARACTER STATE MACHINE ENGINE INTEGRATION
@@ -334,7 +346,7 @@ export function AnimationPreview({
 
     const interval = 1000 / fps;
     const timer = setInterval(() => {
-      setCurrentFrameIndex((prev) => {
+      setFrameIndex((prev) => {
         if (prev + 1 >= activeFrames.length) {
           return isLooping ? 0 : prev;
         }
@@ -343,7 +355,7 @@ export function AnimationPreview({
     }, interval);
 
     return () => clearInterval(timer);
-  }, [previewMode, isPlaying, fps, isLooping, activeFrames.length]);
+  }, [previewMode, isPlaying, fps, isLooping, activeFrames.length, setFrameIndex]);
 
   // ==========================================
   // CANVAS RENDERING
@@ -582,7 +594,7 @@ export function AnimationPreview({
             value={activeAnimation?.id || ''}
             onChange={(e) => {
               onSelectAnimation?.(e.target.value);
-              setCurrentFrameIndex(0);
+              setFrameIndex(0);
             }}
           >
             {animations.map((a) => (
@@ -766,7 +778,7 @@ export function AnimationPreview({
               </button>
 
               <button
-                onClick={() => setIsPlaying(!isPlaying)}
+                onClick={togglePlay}
                 className="btn btn-secondary px-2.5 py-1.5 text-xs flex items-center gap-1"
                 title={isPlaying ? 'Pause Animation' : 'Play Animation'}
               >
@@ -783,8 +795,8 @@ export function AnimationPreview({
               <button
                 onClick={() => {
                   const prev = (currentFrameIndex - 1 + activeFrames.length) % activeFrames.length;
-                  setCurrentFrameIndex(prev);
-                  onSelectFrame(activeFrames[prev]?.id);
+                  setFrameIndex(prev);
+                  onSelectFrame?.(activeFrames[prev]?.id);
                 }}
                 disabled={activeFrames.length <= 1}
                 className="btn-icon p-1.5 text-slate-400 hover:text-white disabled:opacity-30"
@@ -794,7 +806,7 @@ export function AnimationPreview({
               </button>
 
               <button
-                onClick={() => setIsPlaying(!isPlaying)}
+                onClick={togglePlay}
                 disabled={activeFrames.length === 0}
                 className="btn btn-primary px-3 py-1 text-xs rounded-md shadow"
                 title={isPlaying ? 'Pause' : 'Play Animation'}
@@ -806,8 +818,8 @@ export function AnimationPreview({
               <button
                 onClick={() => {
                   const next = (currentFrameIndex + 1) % activeFrames.length;
-                  setCurrentFrameIndex(next);
-                  onSelectFrame(activeFrames[next]?.id);
+                  setFrameIndex(next);
+                  onSelectFrame?.(activeFrames[next]?.id);
                 }}
                 disabled={activeFrames.length <= 1}
                 className="btn-icon p-1.5 text-slate-400 hover:text-white disabled:opacity-30"

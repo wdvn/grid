@@ -26,6 +26,11 @@ export default function App() {
   const [animations, setAnimations] = useState([]);
   const [selectedAnimationId, setSelectedAnimationId] = useState(null);
 
+  // Synchronized Preview Mode & Playback State between Dock and AnimationPreview
+  const [previewMode, setPreviewMode] = useState('character');
+  const [isAnimationPlaying, setIsAnimationPlaying] = useState(true);
+  const [playbackFrameIndex, setPlaybackFrameIndex] = useState(0);
+
   // Modals
   const [isGridModalOpen, setIsGridModalOpen] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
@@ -265,6 +270,16 @@ export default function App() {
     }
   };
 
+  // Clear all workspace sprites and animations
+  const handleClearAll = useCallback(() => {
+    setImageSrc(null);
+    setImageElement(null);
+    setFrames([]);
+    setSelectedFrameId(null);
+    setAnimations([]);
+    setSelectedAnimationId(null);
+  }, []);
+
   // Godot SpriteFrames Animation Handlers
   const handleAddAnimation = useCallback((customName) => {
     const name = customName || `anim_${animations.length + 1}`;
@@ -343,6 +358,25 @@ export default function App() {
     );
   }, []);
 
+  // Synchronized animation selection: switches preview directly to clip mode and plays it
+  const handleSelectAnimation = useCallback((animId) => {
+    setSelectedAnimationId(animId);
+    setPreviewMode('clip');
+    setPlaybackFrameIndex(0);
+    setIsAnimationPlaying(true);
+  }, []);
+
+  // Synchronized Play/Pause toggle: ensures preview is in clip mode and toggles playback
+  const handleTogglePlay = useCallback(() => {
+    setIsAnimationPlaying((prev) => {
+      const next = !prev;
+      if (next) {
+        setPreviewMode('clip');
+      }
+      return next;
+    });
+  }, []);
+
   // Setup Global Keyboard Shortcuts
   useKeyboardShortcuts({
     selectedFrameId,
@@ -362,30 +396,24 @@ export default function App() {
         imageSrc={imageSrc}
         onFileUpload={handleFileUpload}
         onLoadSample={(sample) => loadSpriteImage(sample.dataUrl, sample.initialFrames)}
-        onClear={() => {
-          setImageSrc(null);
-          setImageElement(null);
-          setFrames([]);
-          setSelectedFrameId(null);
-          setAnimations([]);
-          setSelectedAnimationId(null);
-        }}
+        onClear={handleClearAll}
         onOpenExportModal={() => setIsExportModalOpen(true)}
         frameCount={frames.length}
       />
 
       {/* Main 3-Column Studio Workspace */}
       <main className="main-workspace">
-        {/* Left Column: Properties Panel */}
+        {/* Left Column: Frame Properties & Pivot Inspector */}
         <FrameProperties
-          frames={frames}
-          selectedFrameId={selectedFrameId}
-          onSelectFrame={setSelectedFrameId}
+          selectedFrame={frames.find((f) => f.id === selectedFrameId)}
+          selectedIndex={frames.findIndex((f) => f.id === selectedFrameId)}
+          totalFrames={frames.length}
           onUpdateFrame={handleUpdateFrame}
           onDuplicateFrame={handleDuplicateFrame}
           onDeleteFrame={handleDeleteFrame}
-          onMoveFrameOrder={handleMoveFrameOrder}
           imageDimensions={imageDimensions}
+          frames={frames}
+          onSelectFrame={setSelectedFrameId}
         />
 
         {/* Center Column: Interactive Sprite Sheet Canvas */}
@@ -410,7 +438,13 @@ export default function App() {
           onSelectFrame={setSelectedFrameId}
           animations={animations}
           selectedAnimationId={selectedAnimationId}
-          onSelectAnimation={setSelectedAnimationId}
+          onSelectAnimation={handleSelectAnimation}
+          previewMode={previewMode}
+          onPreviewModeChange={setPreviewMode}
+          isPlaying={isAnimationPlaying}
+          onTogglePlay={handleTogglePlay}
+          currentFrameIndex={playbackFrameIndex}
+          onFrameIndexChange={setPlaybackFrameIndex}
         />
       </main>
 
@@ -426,7 +460,7 @@ export default function App() {
           onMoveFrameOrder={handleMoveFrameOrder}
           animations={animations}
           selectedAnimationId={selectedAnimationId}
-          onSelectAnimation={setSelectedAnimationId}
+          onSelectAnimation={handleSelectAnimation}
           onAddAnimation={handleAddAnimation}
           onDuplicateAnimation={handleDuplicateAnimation}
           onDeleteAnimation={handleDeleteAnimation}
@@ -434,6 +468,9 @@ export default function App() {
           onAddFrameToAnimation={handleAddFrameToAnimation}
           onRemoveFrameFromAnimation={handleRemoveFrameFromAnimation}
           onReorderAnimationFrames={handleReorderAnimationFrames}
+          isPlaying={isAnimationPlaying}
+          onTogglePlay={handleTogglePlay}
+          playbackFrameIndex={playbackFrameIndex}
         />
       </footer>
 
