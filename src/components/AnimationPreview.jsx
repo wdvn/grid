@@ -107,12 +107,17 @@ export function AnimationPreview({
 
   const stateMachineRef = useRef(null);
   const [activeStateId, setActiveStateId] = useState('Idle');
-  const [currentDirection, setCurrentDirection] = useState('down');
-  const [characterFrameIndex, setCharacterFrameIndex] = useState(0);
+  const activeStateIdRef = useRef('Idle');
   const [isStationary, setIsStationary] = useState(false); // Walk in arena vs stationary center
   const containerRef = useRef(null);
   const [arenaSize, setArenaSize] = useState({ w: 340, h: 280 });
-  const [charPos, setCharPos] = useState({ x: 170, y: 140 }); // Pixel pos in arena
+  const arenaSizeRef = useRef({ w: 340, h: 280 });
+  arenaSizeRef.current = arenaSize;
+
+  // Real-time character physics & animation state stored in refs to eliminate 60 FPS React re-renders
+  const charPosRef = useRef({ x: 170, y: 140 });
+  const charFrameIdxRef = useRef(0);
+  const frameAccRef = useRef(0);
 
   // Measure container dimensions dynamically to guarantee 1:1 pixel aspect ratio without distortion
   useEffect(() => {
@@ -123,7 +128,7 @@ export function AnimationPreview({
         if (width > 20 && height > 20) {
           const w = Math.round(width);
           const h = Math.round(height);
-          setArenaSize(prev => (prev.w === w && prev.h === h ? prev : { w, h }));
+          setArenaSize((prev) => (prev.w === w && prev.h === h ? prev : { w, h }));
         }
       }
     });
@@ -133,7 +138,10 @@ export function AnimationPreview({
 
   // Center character when arena dimensions change or reset
   const resetCharPosition = useCallback(() => {
-    setCharPos({ x: Math.round(arenaSize.w / 2), y: Math.round(arenaSize.h / 2) });
+    charPosRef.current = {
+      x: Math.round(arenaSize.w / 2),
+      y: Math.round(arenaSize.h / 2)
+    };
   }, [arenaSize.w, arenaSize.h]);
 
   useEffect(() => {
@@ -143,6 +151,10 @@ export function AnimationPreview({
   // Initialize or update state machine when graph changes
   useEffect(() => {
     stateMachineRef.current = new CharacterStateMachine(graphConfig);
+    activeStateIdRef.current = graphConfig.defaultState || 'Idle';
+    setActiveStateId(activeStateIdRef.current);
+    charFrameIdxRef.current = 0;
+    frameAccRef.current = 0;
   }, [graphConfig]);
 
   // Real-time keyboard input tracking (WASD + Arrows + Space)
@@ -179,9 +191,7 @@ export function AnimationPreview({
       moveY: my
     });
 
-    setCurrentDirection(stateMachineRef.current.lastDirection);
-
-    setActiveKeys(prev => {
+    setActiveKeys((prev) => {
       if (
         prev.up === isUp &&
         prev.down === isDown &&
@@ -206,7 +216,7 @@ export function AnimationPreview({
       if (isDown && stateMachineRef.current) {
         stateMachineRef.current.setParameters({ isAttacking: true });
       }
-      setActiveKeys(prev => (prev.action === isDown ? prev : { ...prev, action: isDown }));
+      setActiveKeys((prev) => (prev.action === isDown ? prev : { ...prev, action: isDown }));
       return;
     }
 
@@ -231,12 +241,13 @@ export function AnimationPreview({
       const trackedKeys = ['KeyW', 'KeyS', 'KeyA', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'];
       if (trackedKeys.includes(e.code)) {
         e.preventDefault();
+        if (e.repeat) return; // Prevent auto-repeat spam from stuttering frame pacing
 
         if (e.code === 'Space') {
           if (stateMachineRef.current) {
             stateMachineRef.current.setParameters({ isAttacking: true });
           }
-          setActiveKeys(prev => (prev.action ? prev : { ...prev, action: true }));
+          setActiveKeys((prev) => (prev.action ? prev : { ...prev, action: true }));
           return;
         }
 
@@ -249,7 +260,7 @@ export function AnimationPreview({
       if (previewMode !== 'character') return;
 
       if (e.code === 'Space') {
-        setActiveKeys(prev => (!prev.action ? prev : { ...prev, action: false }));
+        setActiveKeys((prev) => (!prev.action ? prev : { ...prev, action: false }));
         return;
       }
 
@@ -284,52 +295,173 @@ export function AnimationPreview({
     }
   }, [previewMode]);
 
-  // State Machine Game Loop (Updates state transitions, arena movement, and frame cycling)
+  // Direct Character Canvas Drawing Helper (Draws razor-sharp pixelated character in arena)
+  const drawCharacterCanvas = useCallback((ctx, canvas) => {
+    if (!imageElement || frames.length === 0) return;
+
+    const curArena = arenaSizeRef.current;
+    if (canvas.width !== curArena.w) canvas.width = curArena.w;
+    if (canvas.height !== curArena.h) canvas.height = curArena.h;
+
+    ctx.imageSmoothingEnabled = false;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Draw Arena Subtle Checker Tile Floor
+    const tileSize = 24;
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.02)';
+    for (let r = 0; r < Math.ceil(curArena.h / tileSize); r++) {
+      for (let c = 0; c < Math.ceil(curArena.w / tileSize); c++) {
+        if ((r + c) % 2 === 0) {
+          ctx.fillRect(c * tileSize, r * tileSize, tileSize, tileSize);
+        }
+      }
+    }
+
+    // Draw Arena Subtle Boundary Ring
+    ctx.strokeStyle = 'rgba(59, 130, 246, 0.15)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(6, 6, curArena.w - 12, curArena.h - 12);
+
+    // Draw Corner Accent Brackets
+    ctx.strokeStyle = 'rgba(59, 130, 246, 0.4)';
+    ctx.lineWidth = 2;
+    const bLen = 10;
+    // Top-Left
+    ctx.beginPath(); ctx.moveTo(6, 6 + bLen); ctx.lineTo(6, 6); ctx.lineTo(6 + bLen, 6); ctx.stroke();
+    // Top-Right
+    ctx.beginPath(); ctx.moveTo(curArena.w - 6 - bLen, 6); ctx.lineTo(curArena.w - 6, 6); ctx.lineTo(curArena.w - 6, 6 + bLen); ctx.stroke();
+    // Bottom-Left
+    ctx.beginPath(); ctx.moveTo(6, curArena.h - 6 - bLen); ctx.lineTo(6, curArena.h - 6); ctx.lineTo(6 + bLen, curArena.h - 6); ctx.stroke();
+    // Bottom-Right
+    ctx.beginPath(); ctx.moveTo(curArena.w - 6 - bLen, curArena.h - 6); ctx.lineTo(curArena.w - 6, curArena.h - 6); ctx.lineTo(curArena.w - 6, curArena.h - 6 - bLen); ctx.stroke();
+
+    // Resolve active clip frame from character state machine
+    const clipObj = stateMachineRef.current?.getCurrentClip();
+    const clipFrames = clipObj?.clip || [];
+    const safeIndex = clipFrames.length > 0 ? (charFrameIdxRef.current % clipFrames.length) : 0;
+    const activeFrame = clipFrames[safeIndex] || frames[0];
+
+    if (activeFrame && activeFrame.w > 0 && activeFrame.h > 0) {
+      const drawW = activeFrame.w * zoomScale;
+      const drawH = activeFrame.h * zoomScale;
+
+      let drawX, drawY;
+      if (isStationary) {
+        drawX = Math.round((curArena.w - drawW) / 2);
+        drawY = Math.round((curArena.h - drawH) / 2);
+      } else {
+        drawX = Math.round(charPosRef.current.x - drawW / 2);
+        drawY = Math.round(charPosRef.current.y - drawH / 2);
+      }
+
+      // Draw clean drop shadow under character's feet
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+      ctx.beginPath();
+      const shadowW = Math.max(10, drawW * 0.35);
+      const shadowH = Math.max(4, drawW * 0.12);
+      const feetY = drawY + drawH - Math.max(2, Math.round(zoomScale * 0.8));
+      ctx.ellipse(
+        drawX + drawW / 2,
+        feetY,
+        shadowW,
+        shadowH,
+        0,
+        0,
+        Math.PI * 2
+      );
+      ctx.fill();
+
+      // Draw Sprite with 0% distortion and razor-sharp pixels
+      ctx.globalAlpha = 1.0;
+      ctx.drawImage(
+        imageElement,
+        activeFrame.x,
+        activeFrame.y,
+        activeFrame.w,
+        activeFrame.h,
+        drawX,
+        drawY,
+        drawW,
+        drawH
+      );
+    }
+  }, [imageElement, frames, zoomScale, isStationary]);
+
+  // High-Performance 60 FPS Game Loop for Character Mode (Buttery-smooth movement & frame timing)
   useEffect(() => {
-    if (previewMode !== 'character' || !isPlaying) return;
+    if (previewMode !== 'character') return;
 
     let lastTime = performance.now();
-    let frameAcc = 0;
     let animId;
 
     const tick = (now) => {
-      const dt = Math.min((now - lastTime) / 1000, 0.1);
+      const dt = Math.min((now - lastTime) / 1000, 0.05);
       lastTime = now;
 
-      if (stateMachineRef.current) {
+      if (isPlaying && stateMachineRef.current) {
         const resolved = stateMachineRef.current.update(dt);
-        setActiveStateId(stateMachineRef.current.currentStateId);
-        setCurrentDirection(stateMachineRef.current.lastDirection);
+        const newStateId = stateMachineRef.current.currentStateId;
+
+        // Only update React state when active state truly changes (preserves 60 FPS with 0 re-renders during motion)
+        if (newStateId !== activeStateIdRef.current) {
+          activeStateIdRef.current = newStateId;
+          setActiveStateId(newStateId);
+          charFrameIdxRef.current = 0;
+          frameAccRef.current = 0;
+        }
 
         const currentClip = resolved?.clip || [];
 
         // Move character in arena if speed > 0 and not stationary
         const params = stateMachineRef.current.parameters;
         if (!isStationary && params.speed > 0) {
-          const moveSpeed = 130 * dt; // Pixels per second
-          setCharPos(prev => {
-            let nx = prev.x + params.moveX * moveSpeed;
-            // Note: moveY is +1 for Up in blend space, so subtract from screen Y
-            let ny = prev.y - params.moveY * moveSpeed;
+          let mx = params.moveX;
+          let my = params.moveY;
 
-            // Dynamically clamp inside arena box
-            const margin = 28;
-            nx = Math.max(margin, Math.min(arenaSize.w - margin, nx));
-            ny = Math.max(margin, Math.min(arenaSize.h - margin, ny));
-            return { x: nx, y: ny };
-          });
+          // Normalize diagonal movement speed (prevents 41% speed lurch on diagonals)
+          if (mx !== 0 && my !== 0) {
+            mx *= 0.70710678;
+            my *= 0.70710678;
+          }
+
+          const moveSpeed = 130 * dt; // Pixels per second
+          const curArena = arenaSizeRef.current;
+          const activeFrame = currentClip[charFrameIdxRef.current] || frames[0];
+          const halfW = activeFrame ? (activeFrame.w * zoomScale) / 2 : 24;
+          const halfH = activeFrame ? (activeFrame.h * zoomScale) / 2 : 24;
+          const pad = 10;
+
+          let nx = charPosRef.current.x + mx * moveSpeed;
+          let ny = charPosRef.current.y - my * moveSpeed;
+
+          // Clean clamping prevents character from ever clipping arena borders
+          nx = Math.max(halfW + pad, Math.min(curArena.w - halfW - pad, nx));
+          ny = Math.max(halfH + pad, Math.min(curArena.h - halfH - pad, ny));
+
+          charPosRef.current.x = nx;
+          charPosRef.current.y = ny;
         }
 
-        // Cycle clip frames
-        frameAcc += dt;
-        const frameDuration = 1 / Math.max(1, fps);
-        if (frameAcc >= frameDuration) {
-          frameAcc = 0;
-          if (currentClip.length > 0) {
-            setCharacterFrameIndex(prev => (prev + 1) % currentClip.length);
-          } else {
-            setCharacterFrameIndex(0);
+        // Cycle animation frames smoothly without accumulator loss
+        if (currentClip.length > 1) {
+          frameAccRef.current += dt;
+          const frameDuration = 1 / Math.max(1, fps);
+          if (frameAccRef.current >= frameDuration) {
+            const advance = Math.floor(frameAccRef.current / frameDuration);
+            frameAccRef.current -= advance * frameDuration;
+            charFrameIdxRef.current = (charFrameIdxRef.current + advance) % currentClip.length;
           }
+        } else {
+          charFrameIdxRef.current = 0;
+          frameAccRef.current = 0;
+        }
+      }
+
+      // Render directly to canvas on every display refresh frame
+      if (canvasRef.current) {
+        const ctx = canvasRef.current.getContext('2d');
+        if (ctx) {
+          drawCharacterCanvas(ctx, canvasRef.current);
         }
       }
 
@@ -338,7 +470,7 @@ export function AnimationPreview({
 
     animId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(animId);
-  }, [previewMode, isPlaying, fps, isStationary]);
+  }, [previewMode, isPlaying, fps, isStationary, drawCharacterCanvas, frames, zoomScale]);
 
   // Classic Clip Mode Frame Tick Timer
   useEffect(() => {
@@ -357,153 +489,58 @@ export function AnimationPreview({
     return () => clearInterval(timer);
   }, [previewMode, isPlaying, fps, isLooping, activeFrames.length, setFrameIndex]);
 
-  // ==========================================
-  // CANVAS RENDERING
-  // ==========================================
+  // Classic Clip Mode Canvas Rendering
   useEffect(() => {
-    if (!canvasRef.current || !imageElement) return;
+    if (previewMode !== 'clip' || !canvasRef.current || !imageElement) return;
 
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
+    if (!ctx) return;
 
-    // 1. Traditional Clip Mode Rendering
-    if (previewMode === 'clip') {
-      const activeFrame = activeFrames[currentFrameIndex];
-      if (!activeFrame || activeFrame.w <= 0 || activeFrame.h <= 0) return;
+    const activeFrame = activeFrames[currentFrameIndex];
+    if (!activeFrame || activeFrame.w <= 0 || activeFrame.h <= 0) return;
 
-      canvas.width = Math.max(1, activeFrame.w * zoomScale);
-      canvas.height = Math.max(1, activeFrame.h * zoomScale);
+    const targetW = Math.max(1, activeFrame.w * zoomScale);
+    const targetH = Math.max(1, activeFrame.h * zoomScale);
+    if (canvas.width !== targetW) canvas.width = targetW;
+    if (canvas.height !== targetH) canvas.height = targetH;
 
-      ctx.imageSmoothingEnabled = false;
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.imageSmoothingEnabled = false;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      // Onion Skinning
-      if (onionSkin && activeFrames.length > 1) {
-        const prevIdx = (currentFrameIndex - 1 + activeFrames.length) % activeFrames.length;
-        const prevFrame = activeFrames[prevIdx];
-        if (prevFrame && prevFrame.w > 0 && prevFrame.h > 0) {
-          ctx.globalAlpha = 0.25;
-          ctx.drawImage(
-            imageElement,
-            prevFrame.x, prevFrame.y, prevFrame.w, prevFrame.h,
-            0, 0, canvas.width, canvas.height
-          );
-        }
-      }
-
-      ctx.globalAlpha = 1.0;
-      ctx.drawImage(
-        imageElement,
-        activeFrame.x, activeFrame.y, activeFrame.w, activeFrame.h,
-        0, 0, canvas.width, canvas.height
-      );
-      return;
-    }
-
-    // 2. Character State Machine Mode Rendering
-    if (previewMode === 'character') {
-      canvas.width = arenaSize.w;
-      canvas.height = arenaSize.h;
-
-      ctx.imageSmoothingEnabled = false;
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-      // Draw Arena Subtle Checker Tile Floor
-      const tileSize = 24;
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.02)';
-      for (let r = 0; r < Math.ceil(arenaSize.h / tileSize); r++) {
-        for (let c = 0; c < Math.ceil(arenaSize.w / tileSize); c++) {
-          if ((r + c) % 2 === 0) {
-            ctx.fillRect(c * tileSize, r * tileSize, tileSize, tileSize);
-          }
-        }
-      }
-
-      // Draw Arena Subtle Boundary Ring
-      ctx.strokeStyle = 'rgba(59, 130, 246, 0.15)';
-      ctx.lineWidth = 1;
-      ctx.strokeRect(6, 6, arenaSize.w - 12, arenaSize.h - 12);
-
-      // Draw Corner Accent Brackets
-      ctx.strokeStyle = 'rgba(59, 130, 246, 0.4)';
-      ctx.lineWidth = 2;
-      const bLen = 10;
-      // Top-Left
-      ctx.beginPath(); ctx.moveTo(6, 6 + bLen); ctx.lineTo(6, 6); ctx.lineTo(6 + bLen, 6); ctx.stroke();
-      // Top-Right
-      ctx.beginPath(); ctx.moveTo(arenaSize.w - 6 - bLen, 6); ctx.lineTo(arenaSize.w - 6, 6); ctx.lineTo(arenaSize.w - 6, 6 + bLen); ctx.stroke();
-      // Bottom-Left
-      ctx.beginPath(); ctx.moveTo(6, arenaSize.h - 6 - bLen); ctx.lineTo(6, arenaSize.h - 6); ctx.lineTo(6 + bLen, arenaSize.h - 6); ctx.stroke();
-      // Bottom-Right
-      ctx.beginPath(); ctx.moveTo(arenaSize.w - 6 - bLen, arenaSize.h - 6); ctx.lineTo(arenaSize.w - 6, arenaSize.h - 6); ctx.lineTo(arenaSize.w - 6, arenaSize.h - 6 - bLen); ctx.stroke();
-
-      // Resolve active clip frame from character state machine
-      const clipObj = stateMachineRef.current?.getCurrentClip();
-      const clipFrames = clipObj?.clip || [];
-      const safeIndex = clipFrames.length > 0 ? (characterFrameIndex % clipFrames.length) : 0;
-      const activeFrame = clipFrames[safeIndex] || frames[0];
-
-      if (activeFrame && activeFrame.w > 0 && activeFrame.h > 0) {
-        // True integer pixel-perfect scale preserving exact 1:1 aspect ratio
-        const drawW = activeFrame.w * zoomScale;
-        const drawH = activeFrame.h * zoomScale;
-
-        let drawX, drawY;
-        if (isStationary) {
-          drawX = Math.round((arenaSize.w - drawW) / 2);
-          drawY = Math.round((arenaSize.h - drawH) / 2);
-        } else {
-          drawX = Math.round(charPos.x - drawW / 2);
-          drawY = Math.round(charPos.y - drawH / 2);
-        }
-
-        // Draw clean drop shadow under character's feet
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
-        ctx.beginPath();
-        const shadowW = Math.max(10, drawW * 0.35);
-        const shadowH = Math.max(4, drawW * 0.12);
-        const feetY = drawY + drawH - Math.max(2, Math.round(zoomScale * 0.8));
-        ctx.ellipse(
-          drawX + drawW / 2,
-          feetY,
-          shadowW,
-          shadowH,
-          0,
-          0,
-          Math.PI * 2
-        );
-        ctx.fill();
-
-        // Draw Sprite with 0% distortion and razor-sharp pixels
-        ctx.globalAlpha = 1.0;
+    // Onion Skinning
+    if (onionSkin && activeFrames.length > 1) {
+      const prevIdx = (currentFrameIndex - 1 + activeFrames.length) % activeFrames.length;
+      const prevFrame = activeFrames[prevIdx];
+      if (prevFrame && prevFrame.w > 0 && prevFrame.h > 0) {
+        ctx.globalAlpha = 0.25;
         ctx.drawImage(
           imageElement,
-          activeFrame.x,
-          activeFrame.y,
-          activeFrame.w,
-          activeFrame.h,
-          drawX,
-          drawY,
-          drawW,
-          drawH
+          prevFrame.x,
+          prevFrame.y,
+          prevFrame.w,
+          prevFrame.h,
+          0,
+          0,
+          canvas.width,
+          canvas.height
         );
       }
     }
-  }, [
-    imageElement,
-    previewMode,
-    activeFrames,
-    currentFrameIndex,
-    characterFrameIndex,
-    zoomScale,
-    onionSkin,
-    isStationary,
-    charPos,
-    arenaSize,
-    frames,
-    activeStateId,
-    currentDirection
-  ]);
+
+    ctx.globalAlpha = 1.0;
+    ctx.drawImage(
+      imageElement,
+      activeFrame.x,
+      activeFrame.y,
+      activeFrame.w,
+      activeFrame.h,
+      0,
+      0,
+      canvas.width,
+      canvas.height
+    );
+  }, [previewMode, currentFrameIndex, activeFrames, zoomScale, onionSkin, imageElement]);
 
   // Background style helper
   const getBgStyleClass = () => {
