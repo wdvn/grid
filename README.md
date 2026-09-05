@@ -38,7 +38,11 @@
 - **Dynamic WASD & Arrow Key Sync**: Active glowing feedback on directional controls and Spacebar action triggers.
 - **Strict 1:1 Pixel Aspect Ratio**: Eliminates sprite distortion and subpixel stretching.
 
-### 📦 Export & Integration Suite
+### 📦 Import & Export Suite
+- **Import Sheet Atlas & Frame Aliases**:
+  - Load existing atlas metadata from **TexturePacker** (Hash & Array formats), **Phaser 3**, **Aseprite** (including `frameTags` animation import), **Unity Sprite Atlas**, and custom **Frame Alias Maps**.
+  - Upload JSON atlas with an optional companion sprite sheet image, or paste raw JSON directly.
+  - Choose between replacing or appending to current frame sequences.
 - **Engine State Machine Exporter**: Export state graphs directly formatted for:
   - **Unity Mecanim** (`AnimatorController` schema with 2D BlendTree)
   - **Godot 4.x** (`AnimationNodeStateMachine` + `AnimationNodeBlendSpace2D` schema)

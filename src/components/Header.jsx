@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Layers, Upload, Download, Trash2, Sparkles, ChevronDown, Flame, Shield, HelpCircle } from 'lucide-react';
+import { Layers, Upload, Download, Trash2, Sparkles, ChevronDown, Flame, Shield, HelpCircle, FolderInput } from 'lucide-react';
 import { createSampleSpriteSheet, createFoxSpritePreset } from '../utils/sampleSprites';
 
 export function Header({
@@ -8,6 +8,7 @@ export function Header({
   onLoadSample,
   onClear,
   onOpenExportModal,
+  onOpenImportAtlasModal,
   frameCount
 }) {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -185,6 +186,16 @@ export function Header({
             }}
           />
         </label>
+
+        {/* Import Atlas Button */}
+        <button
+          onClick={onOpenImportAtlasModal}
+          className="btn btn-secondary text-xs flex items-center gap-1.5 border-emerald-500/30 text-emerald-300 hover:text-emerald-200 hover:border-emerald-500/60"
+          title="Import Sprite Sheet Atlas (JSON, TexturePacker, Phaser, Aseprite)"
+        >
+          <FolderInput size={14} className="text-emerald-400" />
+          <span>Import Atlas</span>
+        </button>
 
         {imageSrc && (
           <>

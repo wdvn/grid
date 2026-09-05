@@ -6,6 +6,7 @@ import { AnimationPreview } from './components/AnimationPreview';
 import { FrameTimeline } from './components/FrameTimeline';
 import { QuickGridModal } from './components/QuickGridModal';
 import { ExportModal } from './components/ExportModal';
+import { ImportAtlasModal } from './components/ImportAtlasModal';
 
 import { createSampleSpriteSheet, createFoxSpritePreset } from './utils/sampleSprites';
 import { autoDetectSprites } from './utils/autoDetectSprites';
@@ -34,6 +35,7 @@ export default function App() {
   // Modals
   const [isGridModalOpen, setIsGridModalOpen] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [isImportAtlasModalOpen, setIsImportAtlasModalOpen] = useState(false);
 
   // Load Fox Run sample on first render as requested
   useEffect(() => {
@@ -107,11 +109,60 @@ export default function App() {
 
   // File Upload handler
   const handleFileUpload = (file) => {
+    if (file.name.endsWith('.json') || file.type.includes('json')) {
+      setIsImportAtlasModalOpen(true);
+      return;
+    }
     const reader = new FileReader();
     reader.onload = (e) => {
       loadSpriteImage(e.target.result);
     };
     reader.readAsDataURL(file);
+  };
+
+  // Import Atlas JSON & Frames handler
+  const handleImportAtlas = ({ frames: newFrames, animations: newAnims, imageFile, imageName, importMode }) => {
+    if (imageFile) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        loadSpriteImage(e.target.result, newFrames);
+        if (newAnims && newAnims.length > 0) {
+          setAnimations(newAnims);
+          setSelectedAnimationId(newAnims[0]?.id || null);
+        }
+      };
+      reader.readAsDataURL(imageFile);
+      return;
+    }
+
+    if (imageSrc) {
+      if (importMode === 'append') {
+        const combined = [...frames, ...newFrames];
+        setFrames(combined);
+        setSelectedFrameId(newFrames[0]?.id || combined[0]?.id || null);
+        if (newAnims && newAnims.length > 0) {
+          setAnimations((prev) => [...prev, ...newAnims]);
+        }
+      } else {
+        setFrames(newFrames);
+        setSelectedFrameId(newFrames[0]?.id || null);
+        if (newAnims && newAnims.length > 0) {
+          setAnimations(newAnims);
+          setSelectedAnimationId(newAnims[0]?.id || null);
+        } else {
+          const anims = generateDefaultAnimations(newFrames);
+          setAnimations(anims);
+          setSelectedAnimationId(anims[0]?.id || null);
+        }
+      }
+    } else {
+      setFrames(newFrames);
+      setSelectedFrameId(newFrames[0]?.id || null);
+      if (newAnims && newAnims.length > 0) {
+        setAnimations(newAnims);
+        setSelectedAnimationId(newAnims[0]?.id || null);
+      }
+    }
   };
 
   // Add a new frame manually
@@ -416,6 +467,7 @@ export default function App() {
         onLoadSample={(sample) => loadSpriteImage(sample.dataUrl, sample.initialFrames)}
         onClear={handleClearAll}
         onOpenExportModal={() => setIsExportModalOpen(true)}
+        onOpenImportAtlasModal={() => setIsImportAtlasModalOpen(true)}
         frameCount={frames.length}
       />
 
@@ -446,6 +498,7 @@ export default function App() {
           onAutoDetect={handleAutoDetect}
           onOpenQuickGrid={() => setIsGridModalOpen(true)}
           onFileUpload={handleFileUpload}
+          onOpenImportAtlasModal={() => setIsImportAtlasModalOpen(true)}
         />
 
         {/* Right Column: Animation Preview Player */}
@@ -507,6 +560,13 @@ export default function App() {
         imageDimensions={imageDimensions}
         imageSrc={imageSrc}
         frames={frames}
+      />
+
+      <ImportAtlasModal
+        isOpen={isImportAtlasModalOpen}
+        onClose={() => setIsImportAtlasModalOpen(false)}
+        hasExistingImage={Boolean(imageSrc)}
+        onImportAtlas={handleImportAtlas}
       />
     </div>
   );

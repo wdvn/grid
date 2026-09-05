@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { ZoomIn, ZoomOut, Maximize, RotateCcw, Move, Sparkles, Plus, Grid, Info, Hash, Target } from 'lucide-react';
+import { ZoomIn, ZoomOut, Maximize, RotateCcw, Move, Sparkles, Plus, Grid, Info, Hash, Target, FolderInput } from 'lucide-react';
 
 export function CanvasWorkspace({
   imageSrc,
@@ -11,7 +11,8 @@ export function CanvasWorkspace({
   onUpdateFrame,
   onAutoDetect,
   onOpenQuickGrid,
-  onFileUpload
+  onFileUpload,
+  onOpenImportAtlasModal
 }) {
   const containerRef = useRef(null);
   const imgRef = useRef(null);
@@ -577,19 +578,31 @@ export function CanvasWorkspace({
             Paste directly from clipboard (<kbd>Ctrl + V</kbd>), drag & drop an image file here, or choose a file below.
           </p>
 
-          <label className="btn btn-primary px-6 py-2.5 text-sm cursor-pointer shadow-lg shadow-blue-500/25">
-            Choose Sprite Sheet (PNG, JPG, WebP)
-            <input
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={(e) => {
-                if (e.target.files?.[0]) {
-                  onFileUpload(e.target.files[0]);
-                }
-              }}
-            />
-          </label>
+          <div className="flex flex-wrap items-center justify-center gap-3">
+            <label className="btn btn-primary px-5 py-2.5 text-sm cursor-pointer shadow-lg shadow-blue-500/25">
+              Choose Sprite Sheet (PNG, JPG, WebP)
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => {
+                  if (e.target.files?.[0]) {
+                    onFileUpload(e.target.files[0]);
+                  }
+                }}
+              />
+            </label>
+
+            {onOpenImportAtlasModal && (
+              <button
+                onClick={onOpenImportAtlasModal}
+                className="btn btn-secondary px-5 py-2.5 text-sm flex items-center gap-2 border-emerald-500/30 text-emerald-300 hover:text-emerald-200 hover:border-emerald-500/60"
+              >
+                <FolderInput size={16} className="text-emerald-400" />
+                <span>Import Sheet Atlas (JSON)</span>
+              </button>
+            )}
+          </div>
         </div>
       )}
     </div>
