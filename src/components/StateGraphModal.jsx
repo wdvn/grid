@@ -40,139 +40,366 @@ export function StateGraphModal({
   frames = []
 }) {
   const [localGraph, setLocalGraph] = useState(graphConfig);
+  const pendingGraphRef = useRef(graphConfig);
+  pendingGraphRef.current = localGraph;
+
   const [selectedItem, setSelectedItem] = useState(null); // { type: 'state', id } | { type: 'transition', id }
   const [zoom, setZoom] = useState(1.0);
   const [pan, setPan] = useState({ x: 0, y: 0 });
 
-  // Dragging node state
+  // Node Dragging State
   const [draggingNodeId, setDraggingNodeId] = useState(null);
+  const draggingNodeIdRef = useRef(null);
+  draggingNodeIdRef.current = draggingNodeId;
   const dragOffsetRef = useRef({ x: 0, y: 0 });
+  const hasMovedNodeRef = useRef(false);
 
-  // Panning canvas state
+  // Canvas Panning State
   const [isPanning, setIsPanning] = useState(false);
+  const isPanningRef = useRef(false);
+  isPanningRef.current = isPanning;
   const panStartRef = useRef({ x: 0, y: 0 });
 
-  // "Make Transition" drag-and-drop state
-  const [transitionDrag, setTransitionDrag] = useState(null); // { fromId: string, startPos: {x,y}, currentPos: {x,y} }
+  // "Make Transition" State (Dual-mode: Click-to-connect & Drag-to-connect)
+  const [transitionDrag, setTransitionDrag] = useState(null); // { fromId: string, startPos: {x,y}, currentPos: {x,y}, startTime, startClientPos }
+  const transitionDragRef = useRef(null);
+  transitionDragRef.current = transitionDrag;
   const [hoveredTargetNodeId, setHoveredTargetNodeId] = useState(null);
+  const hoveredTargetNodeIdRef = useRef(null);
+  hoveredTargetNodeIdRef.current = hoveredTargetNodeId;
+
+  // Lightweight Toast feedback
+  const [toastMessage, setToastMessage] = useState(null);
+  const toastTimeoutRef = useRef(null);
+  const showToast = useCallback((msg) => {
+    if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+    setToastMessage(msg);
+    toastTimeoutRef.current = setTimeout(() => setToastMessage(null), 2500);
+  }, []);
 
   const canvasAreaRef = useRef(null);
 
-  // Sync local graph when graphConfig prop changes
+  // Sync local graph when graphConfig prop changes externally
   useEffect(() => {
-    setLocalGraph(graphConfig);
+    if (!draggingNodeIdRef.current) {
+      setLocalGraph(graphConfig);
+    }
   }, [graphConfig]);
 
-  // Propagate updates back to parent state machine
-  const notifyUpdate = useCallback((newGraph) => {
+  // Propagate structural updates back to parent state machine
+  const notifyUpdate = useCallback((newGraph, persistImmediately = true) => {
     setLocalGraph(newGraph);
-    if (onUpdateGraphConfig) {
+    pendingGraphRef.current = newGraph;
+    if (persistImmediately && onUpdateGraphConfig) {
       onUpdateGraphConfig(newGraph);
     }
   }, [onUpdateGraphConfig]);
 
-  if (!isOpen || !localGraph) return null;
+  const states = localGraph?.states || {};
+  const transitions = localGraph?.transitions || [];
+  const defaultState = localGraph?.defaultState || 'Idle';
 
-  const states = localGraph.states || {};
-  const transitions = localGraph.transitions || [];
-  const defaultState = localGraph.defaultState || 'Idle';
-
-  // Fixed positions for special nodes
-  const anyStatePos = localGraph.anyStatePosition || { x: 50, y: 50 };
-  const entryPos = localGraph.entryPosition || { x: 50, y: 170 };
+  // Special node positions
+  const anyStatePos = localGraph?.anyStatePosition || { x: 50, y: 50 };
+  const entryPos = localGraph?.entryPosition || { x: 50, y: 170 };
 
   // Helper to get node position by ID
-  const getNodePos = (nodeId) => {
+  const getNodePos = useCallback((nodeId) => {
     if (nodeId === 'AnyState') return anyStatePos;
     if (nodeId === 'Entry') return entryPos;
-    return states[nodeId]?.position || { x: 200, y: 150 };
-  };
+    return states[nodeId]?.position || { x: 260, y: 170 };
+  }, [anyStatePos, entryPos, states]);
 
-  // ==========================================
-  // MOUSE DRAG & PAN EVENT HANDLERS
-  // ==========================================
-  const handleCanvasMouseDown = (e) => {
-    // If clicking background, start panning
-    if (e.target === canvasAreaRef.current || e.target.tagName.toLowerCase() === 'svg') {
-      setIsPanning(true);
-      panStartRef.current = { x: e.clientX - pan.x, y: e.clientY - pan.y };
+  // Hit-testing function: finds target node under client (X, Y) coordinates
+  const findTargetNodeAt = useCallback((clientX, clientY) => {
+    // Method 1: Check DOM element
+    const el = document.elementFromPoint(clientX, clientY);
+    const domNode = el?.closest('[data-state-node-id]');
+    if (domNode) {
+      const id = domNode.getAttribute('data-state-node-id');
+      if (id && id !== 'Entry') return id;
+    }
+
+    // Method 2: Check canvas coordinate bounding boxes
+    if (!canvasAreaRef.current) return null;
+    const rect = canvasAreaRef.current.getBoundingClientRect();
+    const cx = (clientX - rect.left - pan.x) / zoom;
+    const cy = (clientY - rect.top - pan.y) / zoom;
+
+    // Check AnyState
+    if (cx >= anyStatePos.x - 5 && cx <= anyStatePos.x + 185 && cy >= anyStatePos.y - 5 && cy <= anyStatePos.y + 75) {
+      return 'AnyState';
+    }
+
+    // Check standard states (card width is 200px, height ~80px)
+    for (const [id, state] of Object.entries(states)) {
+      const p = state.position || { x: 260, y: 170 };
+      if (cx >= p.x - 10 && cx <= p.x + 210 && cy >= p.y - 10 && cy <= p.y + 95) {
+        return id;
+      }
+    }
+
+    return null;
+  }, [pan.x, pan.y, zoom, anyStatePos, states]);
+
+  // Connect 2 states with duplicate check and instant inspection
+  const connectStates = useCallback((from, to) => {
+    if (!from || !to) return false;
+    if (to === 'Entry') {
+      showToast('Cannot connect to Entry node');
+      return false;
+    }
+    if (to === 'AnyState') {
+      showToast('AnyState cannot be a transition destination');
+      return false;
+    }
+    if (from === to) {
+      showToast('Self-transition is not needed');
+      return false;
+    }
+
+    const currentGraph = pendingGraphRef.current || localGraph;
+    const currentTransitions = currentGraph?.transitions || [];
+    const existing = currentTransitions.find(t => t.from === from && t.to === to);
+    if (existing) {
+      setSelectedItem({ type: 'transition', id: existing.id });
+      showToast(`Transition ${from} → ${to} already exists`);
+      return false;
+    }
+
+    const updated = addTransitionToGraph(currentGraph, from, to);
+    notifyUpdate(updated, true);
+    const newTrans = updated.transitions[updated.transitions.length - 1];
+    if (newTrans) {
+      setSelectedItem({ type: 'transition', id: newTrans.id });
+    }
+    showToast(`✓ Connected: ${from} → ${to}`);
+    return true;
+  }, [localGraph, notifyUpdate, showToast]);
+
+  // Start connecting from a node via '+' port
+  const startMakeTransition = useCallback((e, fromId) => {
+    e.stopPropagation();
+    e.preventDefault();
+
+    if (canvasAreaRef.current) {
+      const fromPos = getNodePos(fromId);
+      const isAnyState = fromId === 'AnyState';
+      const startPos = {
+        x: fromPos.x + (isAnyState ? 170 : 200),
+        y: fromPos.y + (isAnyState ? 30 : 38)
+      };
+
+      setTransitionDrag({
+        fromId,
+        startPos,
+        currentPos: { ...startPos },
+        startTime: Date.now(),
+        startClientPos: { x: e.clientX, y: e.clientY }
+      });
+      setHoveredTargetNodeId(null);
       setSelectedItem(null);
     }
-  };
+  }, [getNodePos]);
 
-  const handleMouseMove = (e) => {
-    // 1. Panning canvas
-    if (isPanning) {
-      setPan({
-        x: e.clientX - panStartRef.current.x,
-        y: e.clientY - panStartRef.current.y
-      });
-      return;
-    }
+  // ==========================================
+  // WINDOW EVENT LISTENERS FOR HIGH-PERF DRAG & PAN
+  // ==========================================
+  useEffect(() => {
+    if (!isOpen) return;
 
-    // 2. Dragging a State Node
-    if (draggingNodeId && canvasAreaRef.current) {
-      const rect = canvasAreaRef.current.getBoundingClientRect();
-      const mouseX = (e.clientX - rect.left - pan.x) / zoom;
-      const mouseY = (e.clientY - rect.top - pan.y) / zoom;
+    let rafId = null;
 
-      const newX = Math.round(mouseX - dragOffsetRef.current.x);
-      const newY = Math.round(mouseY - dragOffsetRef.current.y);
+    const handleWindowMouseMove = (e) => {
+      // 1. Panning canvas (60 FPS smooth, zero lag)
+      if (isPanningRef.current) {
+        if (rafId) cancelAnimationFrame(rafId);
+        rafId = requestAnimationFrame(() => {
+          setPan({
+            x: e.clientX - panStartRef.current.x,
+            y: e.clientY - panStartRef.current.y
+          });
+        });
+        return;
+      }
 
-      if (draggingNodeId === 'AnyState') {
-        notifyUpdate({ ...localGraph, anyStatePosition: { x: newX, y: newY } });
-      } else if (draggingNodeId === 'Entry') {
-        notifyUpdate({ ...localGraph, entryPosition: { x: newX, y: newY } });
-      } else if (states[draggingNodeId]) {
-        notifyUpdate({
-          ...localGraph,
-          states: {
-            ...states,
-            [draggingNodeId]: {
-              ...states[draggingNodeId],
-              position: { x: newX, y: newY }
+      // 2. Dragging a State Node (Local state only, no parent re-renders during drag!)
+      if (draggingNodeIdRef.current && canvasAreaRef.current) {
+        hasMovedNodeRef.current = true;
+        const rect = canvasAreaRef.current.getBoundingClientRect();
+        const mouseX = (e.clientX - rect.left - pan.x) / zoom;
+        const mouseY = (e.clientY - rect.top - pan.y) / zoom;
+
+        const newX = Math.round(mouseX - dragOffsetRef.current.x);
+        const newY = Math.round(mouseY - dragOffsetRef.current.y);
+
+        if (rafId) cancelAnimationFrame(rafId);
+        rafId = requestAnimationFrame(() => {
+          const nodeId = draggingNodeIdRef.current;
+          if (!nodeId) return;
+
+          setLocalGraph(prev => {
+            if (!prev) return prev;
+            let updated;
+            if (nodeId === 'AnyState') {
+              updated = { ...prev, anyStatePosition: { x: newX, y: newY } };
+            } else if (nodeId === 'Entry') {
+              updated = { ...prev, entryPosition: { x: newX, y: newY } };
+            } else if (prev.states && prev.states[nodeId]) {
+              updated = {
+                ...prev,
+                states: {
+                  ...prev.states,
+                  [nodeId]: {
+                    ...prev.states[nodeId],
+                    position: { x: newX, y: newY }
+                  }
+                }
+              };
+            } else {
+              return prev;
             }
+            pendingGraphRef.current = updated;
+            return updated;
+          });
+        });
+        return;
+      }
+
+      // 3. Dragging a Transition Connection Line
+      if (transitionDragRef.current && canvasAreaRef.current) {
+        const rect = canvasAreaRef.current.getBoundingClientRect();
+        const mouseCanvasX = (e.clientX - rect.left - pan.x) / zoom;
+        const mouseCanvasY = (e.clientY - rect.top - pan.y) / zoom;
+
+        // Detect target node
+        const targetId = findTargetNodeAt(e.clientX, e.clientY);
+        const fromId = transitionDragRef.current.fromId;
+        const isValidTarget = targetId && targetId !== fromId && targetId !== 'Entry' && targetId !== 'AnyState';
+
+        if (rafId) cancelAnimationFrame(rafId);
+        rafId = requestAnimationFrame(() => {
+          setHoveredTargetNodeId(isValidTarget ? targetId : null);
+
+          // If hovering over a valid target node, snap to target's input edge
+          let finalPos = { x: mouseCanvasX, y: mouseCanvasY };
+          if (isValidTarget) {
+            const targetPos = getNodePos(targetId);
+            finalPos = { x: targetPos.x, y: targetPos.y + 38 };
           }
+
+          setTransitionDrag(prev => prev ? { ...prev, currentPos: finalPos } : null);
         });
       }
+    };
+
+    const handleWindowMouseUp = (e) => {
+      if (rafId) cancelAnimationFrame(rafId);
+
+      // Stop canvas panning
+      if (isPanningRef.current) {
+        setIsPanning(false);
+      }
+
+      // Finish node dragging: commit final position to parent once!
+      if (draggingNodeIdRef.current) {
+        setDraggingNodeId(null);
+        if (hasMovedNodeRef.current) {
+          hasMovedNodeRef.current = false;
+          if (onUpdateGraphConfig && pendingGraphRef.current) {
+            onUpdateGraphConfig(pendingGraphRef.current);
+          }
+        }
+      }
+
+      // Finish transition drag (if dragged)
+      if (transitionDragRef.current) {
+        const curDrag = transitionDragRef.current;
+        const moveDist = Math.hypot(
+          e.clientX - curDrag.startClientPos.x,
+          e.clientY - curDrag.startClientPos.y
+        );
+        const elapsed = Date.now() - curDrag.startTime;
+
+        // If mouse was dragged (> 6px or held for > 200ms)
+        if (moveDist > 6 || elapsed > 200) {
+          const targetId = hoveredTargetNodeIdRef.current || findTargetNodeAt(e.clientX, e.clientY);
+          if (targetId && targetId !== curDrag.fromId && targetId !== 'Entry' && targetId !== 'AnyState') {
+            connectStates(curDrag.fromId, targetId);
+          }
+          setTransitionDrag(null);
+          setHoveredTargetNodeId(null);
+        } else {
+          // Quick click on '+' handle keeps connection mode active for Click-to-Connect!
+          showToast(`Click any target state to connect from ${curDrag.fromId}`);
+        }
+      }
+    };
+
+    window.addEventListener('mousemove', handleWindowMouseMove);
+    window.addEventListener('mouseup', handleWindowMouseUp);
+
+    return () => {
+      if (rafId) cancelAnimationFrame(rafId);
+      window.removeEventListener('mousemove', handleWindowMouseMove);
+      window.removeEventListener('mouseup', handleWindowMouseUp);
+    };
+  }, [isOpen, zoom, pan.x, pan.y, findTargetNodeAt, getNodePos, connectStates, onUpdateGraphConfig, showToast]);
+
+  // Cancel connection on Escape key
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        if (transitionDrag) {
+          setTransitionDrag(null);
+          setHoveredTargetNodeId(null);
+          showToast('Transition canceled');
+        } else if (selectedItem) {
+          setSelectedItem(null);
+        } else {
+          onClose();
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, transitionDrag, selectedItem, onClose, showToast]);
+
+  if (!isOpen || !localGraph) return null;
+
+  // ==========================================
+  // MOUSE & INTERACTION HANDLERS
+  // ==========================================
+  const handleCanvasMouseDown = (e) => {
+    // If connection mode was active and user clicks empty canvas, cancel it
+    if (transitionDrag) {
+      setTransitionDrag(null);
+      setHoveredTargetNodeId(null);
+      showToast('Transition canceled');
       return;
     }
 
-    // 3. Dragging a Transition Connection Arrow
-    if (transitionDrag && canvasAreaRef.current) {
-      const rect = canvasAreaRef.current.getBoundingClientRect();
-      const currentPos = {
-        x: (e.clientX - rect.left - pan.x) / zoom,
-        y: (e.clientY - rect.top - pan.y) / zoom
-      };
-      setTransitionDrag(prev => ({ ...prev, currentPos }));
-    }
+    // Start panning if clicking background
+    setIsPanning(true);
+    panStartRef.current = { x: e.clientX - pan.x, y: e.clientY - pan.y };
+    setSelectedItem(null);
   };
 
-  const handleMouseUp = () => {
-    setIsPanning(false);
-    setDraggingNodeId(null);
+  // Start dragging a node (or connect if connection wire is active)
+  const handleNodeMouseDown = (e, nodeId) => {
+    e.stopPropagation();
 
-    // If dropping a transition onto a target node
+    // If connection wire is active, clicking this node completes the connection!
     if (transitionDrag) {
-      if (hoveredTargetNodeId && hoveredTargetNodeId !== transitionDrag.fromId) {
-        // Create new transition
-        const updated = addTransitionToGraph(localGraph, transitionDrag.fromId, hoveredTargetNodeId);
-        notifyUpdate(updated);
-        // Select the newly created transition
-        const newTrans = updated.transitions[updated.transitions.length - 1];
-        if (newTrans) {
-          setSelectedItem({ type: 'transition', id: newTrans.id });
-        }
+      if (nodeId !== transitionDrag.fromId && nodeId !== 'Entry' && nodeId !== 'AnyState') {
+        connectStates(transitionDrag.fromId, nodeId);
       }
       setTransitionDrag(null);
       setHoveredTargetNodeId(null);
+      return;
     }
-  };
 
-  // Start dragging a node
-  const startDragNode = (e, nodeId) => {
-    e.stopPropagation();
     if (canvasAreaRef.current) {
       const rect = canvasAreaRef.current.getBoundingClientRect();
       const mouseX = (e.clientX - rect.left - pan.x) / zoom;
@@ -183,29 +410,16 @@ export function StateGraphModal({
         x: mouseX - nodePos.x,
         y: mouseY - nodePos.y
       };
+      hasMovedNodeRef.current = false;
       setDraggingNodeId(nodeId);
       setSelectedItem({ type: 'state', id: nodeId });
     }
   };
 
-  // Start dragging "Make Transition" arrow
-  const startMakeTransition = (e, fromId) => {
-    e.stopPropagation();
-    if (canvasAreaRef.current) {
-      const fromPos = getNodePos(fromId);
-      const startPos = { x: fromPos.x + 180, y: fromPos.y + 35 };
-      setTransitionDrag({
-        fromId,
-        startPos,
-        currentPos: { ...startPos }
-      });
-    }
-  };
-
-  // Reset node layout to defaults
+  // Reset node layout to engine defaults
   const handleResetLayout = () => {
-    const defaultG = createDefaultCharacterGraph();
-    notifyUpdate({
+    const defaultG = createDefaultCharacterGraph(frames, animations);
+    const updated = {
       ...localGraph,
       anyStatePosition: defaultG.anyStatePosition,
       entryPosition: defaultG.entryPosition,
@@ -215,9 +429,11 @@ export function StateGraphModal({
           { ...s, position: defaultG.states[k]?.position || s.position }
         ])
       )
-    });
+    };
+    notifyUpdate(updated, true);
     setPan({ x: 0, y: 0 });
     setZoom(1.0);
+    showToast('Layout reset to defaults');
   };
 
   // Create a new custom state node
@@ -225,8 +441,8 @@ export function StateGraphModal({
     const count = Object.keys(states).length + 1;
     const newId = `State_${count}`;
     const rect = canvasAreaRef.current ? canvasAreaRef.current.getBoundingClientRect() : { width: 800, height: 500 };
-    const centerX = Math.round((rect.width / 2 - pan.x) / zoom - 90);
-    const centerY = Math.round((rect.height / 2 - pan.y) / zoom - 35);
+    const centerX = Math.round((rect.width / 2 - pan.x) / zoom - 100);
+    const centerY = Math.round((rect.height / 2 - pan.y) / zoom - 40);
 
     const updated = addStateToGraph(localGraph, {
       id: newId,
@@ -234,8 +450,9 @@ export function StateGraphModal({
       type: 'SingleClip',
       position: { x: centerX, y: centerY }
     });
-    notifyUpdate(updated);
+    notifyUpdate(updated, true);
     setSelectedItem({ type: 'state', id: newId });
+    showToast(`Created new state: ${newId}`);
   };
 
   // Selected Transition Object
@@ -276,7 +493,7 @@ export function StateGraphModal({
         ...states,
         [selectedState.id]: updatedState
       }
-    });
+    }, true);
   };
 
   const getSelectedAnimIdForDir = (dir) => {
@@ -286,7 +503,7 @@ export function StateGraphModal({
     const dirFrames = selectedState?.clips?.[dir] || [];
     if (dirFrames.length === 0) return '';
     const dirFrameIds = new Set(dirFrames.map(f => f.id));
-    const matchedAnim = animations.find(a => 
+    const matchedAnim = animations.find(a =>
       a.frameIds.length === dirFrames.length && a.frameIds.every(id => dirFrameIds.has(id))
     );
     return matchedAnim ? matchedAnim.id : '';
@@ -310,7 +527,7 @@ export function StateGraphModal({
         ...states,
         [selectedState.id]: updatedState
       }
-    });
+    }, true);
   };
 
   const getSelectedAnimIdForOneShot = () => {
@@ -329,8 +546,6 @@ export function StateGraphModal({
       <div
         className="modal-card flex flex-col overflow-hidden shadow-2xl border border-white/20"
         style={{ width: '92vw', maxWidth: '1200px', height: '88vh' }}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
       >
         {/* Header Bar */}
         <div className="modal-header bg-slate-900/95 border-b border-white/10 px-4 py-2.5 flex items-center justify-between flex-shrink-0">
@@ -346,7 +561,7 @@ export function StateGraphModal({
                 </span>
               </div>
               <p className="text-[10px] text-slate-400">
-                Drag nodes to reposition • Drag right handles to connect transitions • Click arrows to inspect conditions
+                Drag nodes to reposition • Click or drag from <span className="text-blue-400 font-bold">+</span> to connect states • Click arrows to inspect rules
               </p>
             </div>
           </div>
@@ -355,7 +570,7 @@ export function StateGraphModal({
           <div className="flex items-center gap-2">
             <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-lg border border-white/10">
               <button
-                onClick={() => setZoom(z => Math.max(0.6, z - 0.15))}
+                onClick={() => setZoom(z => Math.max(0.6, Number((z - 0.15).toFixed(2))))}
                 className="btn-icon p-1 text-slate-400 hover:text-white"
                 title="Zoom Out"
               >
@@ -365,7 +580,7 @@ export function StateGraphModal({
                 {Math.round(zoom * 100)}%
               </span>
               <button
-                onClick={() => setZoom(z => Math.min(1.6, z + 0.15))}
+                onClick={() => setZoom(z => Math.min(1.6, Number((z + 0.15).toFixed(2))))}
                 className="btn-icon p-1 text-slate-400 hover:text-white"
                 title="Zoom In"
               >
@@ -400,7 +615,9 @@ export function StateGraphModal({
           {/* 1. INTERACTIVE NODE GRAPH CANVAS */}
           <div
             ref={canvasAreaRef}
-            className="flex-1 relative overflow-hidden select-none bg-slate-950 cursor-grab active:cursor-grabbing"
+            className={`flex-1 relative overflow-hidden select-none bg-slate-950 ${
+              transitionDrag ? 'cursor-crosshair' : isPanning ? 'cursor-grabbing' : 'cursor-grab'
+            }`}
             onMouseDown={handleCanvasMouseDown}
             style={{
               backgroundImage: `
@@ -412,6 +629,24 @@ export function StateGraphModal({
               backgroundPosition: `${pan.x}px ${pan.y}px`
             }}
           >
+            {/* Active Transition Connecting Instruction Banner */}
+            {transitionDrag && (
+              <div className="absolute top-3 left-1/2 -translate-x-1/2 z-30 bg-amber-500/95 text-slate-950 font-semibold px-4 py-1.5 rounded-full shadow-2xl backdrop-blur flex items-center gap-2 text-xs animate-bounce pointer-events-none border border-amber-300">
+                <Link2 size={14} className="text-slate-950 font-bold" />
+                <span>
+                  Connecting from <strong>{transitionDrag.fromId}</strong>: Click or release on target state • Press <strong>Esc</strong> to cancel
+                </span>
+              </div>
+            )}
+
+            {/* Toast Feedback Notification */}
+            {toastMessage && (
+              <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-30 bg-slate-900/95 text-emerald-400 border border-emerald-500/40 px-3.5 py-1 rounded-full shadow-2xl text-xs font-mono flex items-center gap-1.5 pointer-events-none">
+                <Check size={12} className="text-emerald-400" />
+                <span>{toastMessage}</span>
+              </div>
+            )}
+
             {/* Scaled & Panned Canvas Layer */}
             <div
               style={{
@@ -427,7 +662,7 @@ export function StateGraphModal({
               {/* SVG TRANSITION ARROWS LAYER */}
               <svg
                 className="w-full h-full absolute inset-0"
-                style={{ overflow: 'visible', pointerEvents: 'auto' }}
+                style={{ overflow: 'visible', pointerEvents: 'none' }}
               >
                 <defs>
                   {/* Standard arrowhead */}
@@ -475,7 +710,7 @@ export function StateGraphModal({
                   const sx = s.x + 130;
                   const sy = s.y + 25;
                   const ex = targetPos.x;
-                  const ey = targetPos.y + 35;
+                  const ey = targetPos.y + 38;
                   return (
                     <path
                       d={`M ${sx} ${sy} L ${ex} ${ey}`}
@@ -493,9 +728,10 @@ export function StateGraphModal({
                   const p1 = getNodePos(t.from);
                   const p2 = getNodePos(t.to);
 
-                  // Center coordinates
-                  const c1 = { x: p1.x + 90, y: p1.y + 35 };
-                  const c2 = { x: p2.x + 90, y: p2.y + 35 };
+                  // Center coordinates (card width 200px)
+                  const isFromAnyState = t.from === 'AnyState';
+                  const c1 = { x: p1.x + (isFromAnyState ? 85 : 100), y: p1.y + 38 };
+                  const c2 = { x: p2.x + 100, y: p2.y + 38 };
 
                   const dx = c2.x - c1.x;
                   const dy = c2.y - c1.y;
@@ -510,9 +746,9 @@ export function StateGraphModal({
                   const offset = hasReverse ? 10 : 0;
 
                   // Line start & end clamped to node edges
-                  const sx = c1.x + ux * 85 + nx * offset;
+                  const sx = c1.x + ux * (isFromAnyState ? 85 : 95) + nx * offset;
                   const sy = c1.y + uy * 35 + ny * offset;
-                  const ex = c2.x - ux * 85 + nx * offset;
+                  const ex = c2.x - ux * 95 + nx * offset;
                   const ey = c2.y - uy * 35 + ny * offset;
 
                   // Midpoint for curve and clickable rule badge
@@ -529,6 +765,7 @@ export function StateGraphModal({
                         setSelectedItem({ type: 'transition', id: t.id });
                       }}
                       className="cursor-pointer group"
+                      style={{ pointerEvents: 'auto' }}
                     >
                       {/* Thick transparent hit-box area for easy clicking */}
                       <path
@@ -569,22 +806,33 @@ export function StateGraphModal({
                   );
                 })}
 
-                {/* Dragging New Transition Preview Line */}
+                {/* Dragging New Transition Preview Line (Smooth Bezier with arrowhead) */}
                 {transitionDrag && (
                   <path
-                    d={`M ${transitionDrag.startPos.x} ${transitionDrag.startPos.y} L ${transitionDrag.currentPos.x} ${transitionDrag.currentPos.y}`}
+                    d={(() => {
+                      const sx = transitionDrag.startPos.x;
+                      const sy = transitionDrag.startPos.y;
+                      const ex = transitionDrag.currentPos.x;
+                      const ey = transitionDrag.currentPos.y;
+                      const dx = ex - sx;
+                      const dy = ey - sy;
+                      const controlDist = Math.max(40, Math.abs(dx) * 0.4);
+                      return `M ${sx} ${sy} C ${sx + controlDist} ${sy}, ${ex - controlDist} ${ey}, ${ex} ${ey}`;
+                    })()}
                     stroke="#f59e0b"
                     strokeWidth="2.5"
-                    strokeDasharray="4 4"
+                    strokeDasharray="6 4"
                     fill="none"
                     markerEnd="url(#arrowhead-drag)"
+                    style={{ pointerEvents: 'none' }}
                   />
                 )}
               </svg>
 
               {/* SPECIAL NODE: Entry Node (Unity Green) */}
               <div
-                onMouseDown={(e) => startDragNode(e, 'Entry')}
+                data-state-node-id="Entry"
+                onMouseDown={(e) => handleNodeMouseDown(e, 'Entry')}
                 style={{
                   transform: `translate(${entryPos.x}px, ${entryPos.y}px)`,
                   width: '130px',
@@ -601,7 +849,8 @@ export function StateGraphModal({
 
               {/* SPECIAL NODE: AnyState Node (Unity Cyan/Teal) */}
               <div
-                onMouseDown={(e) => startDragNode(e, 'AnyState')}
+                data-state-node-id="AnyState"
+                onMouseDown={(e) => handleNodeMouseDown(e, 'AnyState')}
                 style={{
                   transform: `translate(${anyStatePos.x}px, ${anyStatePos.y}px)`,
                   width: '170px',
@@ -619,11 +868,18 @@ export function StateGraphModal({
                   </span>
                   {/* Make Transition Port Handle */}
                   <button
+                    type="button"
+                    data-connect-from="AnyState"
                     onMouseDown={(e) => startMakeTransition(e, 'AnyState')}
-                    className="w-4 h-4 rounded-full bg-cyan-500/20 border border-cyan-400 text-cyan-300 hover:bg-cyan-500 hover:text-white flex items-center justify-center transition-colors cursor-crosshair"
-                    title="Drag to create transition from AnyState"
+                    onClick={(e) => startMakeTransition(e, 'AnyState')}
+                    className={`w-6 h-6 rounded-md border flex items-center justify-center transition-all cursor-crosshair ${
+                      transitionDrag?.fromId === 'AnyState'
+                        ? 'bg-amber-500 text-slate-900 border-amber-300 ring-4 ring-amber-400/50 scale-110 font-bold'
+                        : 'bg-cyan-500/20 border-cyan-400 text-cyan-300 hover:bg-cyan-500 hover:text-white'
+                    }`}
+                    title="Click or drag to create transition from AnyState"
                   >
-                    <Plus size={10} />
+                    <Plus size={13} strokeWidth={2.5} />
                   </button>
                 </div>
                 <div className="text-[9px] text-cyan-200/70 font-mono">
@@ -638,31 +894,33 @@ export function StateGraphModal({
                 const isDefault = defaultState === id;
                 const isActive = currentActiveStateId === id;
                 const isTargetHovered = hoveredTargetNodeId === id;
+                const isSourceNode = transitionDrag?.fromId === id;
 
                 return (
                   <div
                     key={id}
-                    onMouseDown={(e) => startDragNode(e, id)}
-                    onMouseEnter={() => transitionDrag && setHoveredTargetNodeId(id)}
-                    onMouseLeave={() => transitionDrag && setHoveredTargetNodeId(null)}
+                    data-state-node-id={id}
+                    onMouseDown={(e) => handleNodeMouseDown(e, id)}
                     style={{
                       transform: `translate(${pos.x}px, ${pos.y}px)`,
-                      width: '180px',
+                      width: '200px',
                       pointerEvents: 'auto'
                     }}
-                    className={`absolute rounded-xl border shadow-xl transition-all cursor-move select-none overflow-hidden ${
-                      isActive
+                    className={`absolute rounded-xl border shadow-xl transition-all cursor-move select-none ${
+                      isTargetHovered
+                        ? 'border-amber-400 ring-4 ring-amber-400/60 bg-amber-950/80 shadow-[0_0_25px_rgba(245,158,11,0.5)] scale-[1.02] z-20'
+                        : isSourceNode
+                        ? 'border-blue-400 ring-2 ring-blue-400/60 bg-slate-900 z-10'
+                        : isActive
                         ? 'border-emerald-400 ring-2 ring-emerald-400 shadow-[0_0_18px_rgba(52,211,153,0.35)] bg-slate-900'
                         : isSelected
                         ? 'border-blue-400 ring-2 ring-blue-400/50 bg-slate-900'
-                        : isTargetHovered
-                        ? 'border-amber-400 ring-2 ring-amber-400/60 bg-amber-950/40'
                         : 'border-white/15 bg-slate-900/90 hover:border-white/30'
                     }`}
                   >
                     {/* Node Header Banner */}
                     <div
-                      className={`px-3 py-1.5 flex items-center justify-between text-xs font-bold ${
+                      className={`px-3 py-2 flex items-center justify-between text-xs font-bold rounded-t-xl ${
                         isDefault
                           ? 'bg-amber-700/80 text-amber-100'
                           : id === 'Action'
@@ -670,15 +928,22 @@ export function StateGraphModal({
                           : 'bg-slate-800 text-slate-200'
                       }`}
                     >
-                      <span className="truncate">{state.name || id}</span>
+                      <span className="truncate pr-1">{state.name || id}</span>
 
-                      {/* Transition Output Port Handle */}
+                      {/* Header Transition Port Button */}
                       <button
+                        type="button"
+                        data-connect-from={id}
                         onMouseDown={(e) => startMakeTransition(e, id)}
-                        className="w-4 h-4 rounded-full bg-white/20 hover:bg-white text-white hover:text-slate-900 flex items-center justify-center transition-colors cursor-crosshair ml-1 flex-shrink-0"
-                        title="Drag to create transition to another state"
+                        onClick={(e) => startMakeTransition(e, id)}
+                        className={`w-6 h-6 rounded-md flex items-center justify-center transition-all cursor-crosshair flex-shrink-0 ${
+                          isSourceNode
+                            ? 'bg-amber-400 text-slate-950 font-bold shadow-lg ring-2 ring-amber-300 scale-110'
+                            : 'bg-white/15 hover:bg-blue-500 hover:text-white text-slate-200 border border-white/10 hover:border-blue-400 shadow-sm'
+                        }`}
+                        title="Click or drag to connect transition to another state"
                       >
-                        <Plus size={10} />
+                        <Plus size={13} strokeWidth={2.5} />
                       </button>
                     </div>
 
@@ -701,11 +966,18 @@ export function StateGraphModal({
                           Default State
                         </div>
                       )}
+
+                      {/* Visual Snap Drop Badge */}
+                      {isTargetHovered && (
+                        <div className="text-[9px] text-amber-300 bg-amber-500/25 px-1 py-0.5 rounded border border-amber-400/50 text-center font-bold animate-pulse">
+                          Release / Click to Connect
+                        </div>
+                      )}
                     </div>
 
                     {/* Live Playback Meter (Unity Mecanim Feature) */}
                     {isActive && (
-                      <div className="h-1 w-full bg-slate-950 overflow-hidden">
+                      <div className="h-1 w-full bg-slate-950 overflow-hidden rounded-b-xl">
                         <div className="h-full bg-gradient-to-r from-emerald-400 via-cyan-400 to-blue-500 w-full animate-pulse" />
                       </div>
                     )}
@@ -752,7 +1024,8 @@ export function StateGraphModal({
                         notifyUpdate(
                           updateTransitionInGraph(localGraph, selectedTransition.id, {
                             conditions: [...(selectedTransition.conditions || []), newCond]
-                          })
+                          }),
+                          true
                         );
                       }}
                       className="text-[10px] text-blue-400 hover:text-blue-300 flex items-center gap-0.5"
@@ -770,7 +1043,7 @@ export function StateGraphModal({
                             onChange={(e) => {
                               const nextConds = [...selectedTransition.conditions];
                               nextConds[idx] = { ...cond, param: e.target.value };
-                              notifyUpdate(updateTransitionInGraph(localGraph, selectedTransition.id, { conditions: nextConds }));
+                              notifyUpdate(updateTransitionInGraph(localGraph, selectedTransition.id, { conditions: nextConds }), true);
                             }}
                             className="input-field text-xs py-0.5 flex-1"
                           >
@@ -785,7 +1058,7 @@ export function StateGraphModal({
                             onChange={(e) => {
                               const nextConds = [...selectedTransition.conditions];
                               nextConds[idx] = { ...cond, operator: e.target.value };
-                              notifyUpdate(updateTransitionInGraph(localGraph, selectedTransition.id, { conditions: nextConds }));
+                              notifyUpdate(updateTransitionInGraph(localGraph, selectedTransition.id, { conditions: nextConds }), true);
                             }}
                             className="input-field text-xs py-0.5 w-14"
                           >
@@ -800,7 +1073,7 @@ export function StateGraphModal({
                           <button
                             onClick={() => {
                               const nextConds = selectedTransition.conditions.filter((_, i) => i !== idx);
-                              notifyUpdate(updateTransitionInGraph(localGraph, selectedTransition.id, { conditions: nextConds }));
+                              notifyUpdate(updateTransitionInGraph(localGraph, selectedTransition.id, { conditions: nextConds }), true);
                             }}
                             className="text-slate-500 hover:text-rose-400 p-0.5"
                           >
@@ -816,7 +1089,7 @@ export function StateGraphModal({
                               onChange={(e) => {
                                 const nextConds = [...selectedTransition.conditions];
                                 nextConds[idx] = { ...cond, value: e.target.value === 'true' };
-                                notifyUpdate(updateTransitionInGraph(localGraph, selectedTransition.id, { conditions: nextConds }));
+                                notifyUpdate(updateTransitionInGraph(localGraph, selectedTransition.id, { conditions: nextConds }), true);
                               }}
                               className="input-field text-xs py-0.5 flex-1"
                             >
@@ -831,7 +1104,7 @@ export function StateGraphModal({
                               onChange={(e) => {
                                 const nextConds = [...selectedTransition.conditions];
                                 nextConds[idx] = { ...cond, value: parseFloat(e.target.value) || 0 };
-                                notifyUpdate(updateTransitionInGraph(localGraph, selectedTransition.id, { conditions: nextConds }));
+                                notifyUpdate(updateTransitionInGraph(localGraph, selectedTransition.id, { conditions: nextConds }), true);
                               }}
                               className="input-field text-xs py-0.5 flex-1 font-mono"
                             />
@@ -851,8 +1124,9 @@ export function StateGraphModal({
                 {/* Delete Transition Button */}
                 <button
                   onClick={() => {
-                    notifyUpdate(removeTransitionFromGraph(localGraph, selectedTransition.id));
+                    notifyUpdate(removeTransitionFromGraph(localGraph, selectedTransition.id), true);
                     setSelectedItem(null);
+                    showToast('Transition deleted');
                   }}
                   className="btn bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 text-xs w-full py-1.5 flex items-center justify-center gap-1"
                 >
@@ -882,7 +1156,7 @@ export function StateGraphModal({
                             name: e.target.value
                           }
                         }
-                      });
+                      }, true);
                     }}
                     className="input-field text-xs py-1 w-full"
                   />
@@ -904,7 +1178,7 @@ export function StateGraphModal({
                             type: e.target.value
                           }
                         }
-                      });
+                      }, true);
                     }}
                     className="input-field text-xs py-1 w-full"
                   >
@@ -971,29 +1245,6 @@ export function StateGraphModal({
                         </select>
                       </div>
 
-                      {/* A - Left (West) */}
-                      <div className="bg-slate-950/80 p-2 rounded-lg border border-white/5 space-y-1">
-                        <div className="flex items-center justify-between text-[10px]">
-                          <span className="text-blue-400 font-bold flex items-center gap-1.5">
-                            <kbd className="px-1.5 py-0.5 bg-blue-600/30 text-blue-300 rounded border border-blue-500/40 text-[10px]">A</kbd>
-                            <span>Left (West)</span>
-                          </span>
-                          <span className="text-slate-500 text-[9px]">moveX &lt; 0</span>
-                        </div>
-                        <select
-                          value={getSelectedAnimIdForDir('left')}
-                          onChange={(e) => handleAssignDirClip('left', e.target.value)}
-                          className="input-field text-[11px] py-1 w-full"
-                        >
-                          <option value="" disabled>-- Select Animation --</option>
-                          {animations.map((a) => (
-                            <option key={a.id} value={a.id}>
-                              🎬 {a.name} ({a.frameIds.length} frames)
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
                       {/* D - Right (East) */}
                       <div className="bg-slate-950/80 p-2 rounded-lg border border-white/5 space-y-1">
                         <div className="flex items-center justify-between text-[10px]">
@@ -1016,35 +1267,54 @@ export function StateGraphModal({
                           ))}
                         </select>
                       </div>
+
+                      {/* A - Left (West) */}
+                      <div className="bg-slate-950/80 p-2 rounded-lg border border-white/5 space-y-1">
+                        <div className="flex items-center justify-between text-[10px]">
+                          <span className="text-blue-400 font-bold flex items-center gap-1.5">
+                            <kbd className="px-1.5 py-0.5 bg-blue-600/30 text-blue-300 rounded border border-blue-500/40 text-[10px]">A</kbd>
+                            <span>Left (West)</span>
+                          </span>
+                          <span className="text-slate-500 text-[9px]">moveX &lt; 0</span>
+                        </div>
+                        <select
+                          value={getSelectedAnimIdForDir('left')}
+                          onChange={(e) => handleAssignDirClip('left', e.target.value)}
+                          className="input-field text-[11px] py-1 w-full"
+                        >
+                          <option value="" disabled>-- Select Animation --</option>
+                          {animations.map((a) => (
+                            <option key={a.id} value={a.id}>
+                              🎬 {a.name} ({a.frameIds.length} frames)
+                            </option>
+                          ))}
+                        </select>
+                      </div>
                     </div>
                   </div>
                 )}
 
-                {/* OneShot / Action Clip Mapping */}
-                {(selectedState.type === 'OneShot' || selectedState.type === 'SingleClip') && (
+                {/* OneShot Action Clip Mapping (Attack / Hurt / Action) */}
+                {selectedState.type === 'OneShot' && (
                   <div className="space-y-2 pt-2 border-t border-white/10">
                     <div className="flex items-center justify-between">
-                      <label className="text-[10px] text-amber-300 font-bold uppercase tracking-wider flex items-center gap-1">
+                      <label className="text-[10px] text-purple-300 font-bold uppercase tracking-wider flex items-center gap-1">
                         <Zap size={12} /> Action Animation Clip
                       </label>
                       <span className="text-[9px] text-slate-500 font-mono">Space Key</span>
                     </div>
+
                     <div className="bg-slate-950/80 p-2 rounded-lg border border-white/5 space-y-1">
-                      <div className="flex items-center justify-between text-[10px]">
-                        <span className="text-amber-400 font-bold flex items-center gap-1.5">
-                          <kbd className="px-1.5 py-0.5 bg-amber-500/20 text-amber-300 rounded border border-amber-500/30 text-[10px]">Space</kbd>
-                          <span>Trigger Clip</span>
-                        </span>
-                      </div>
+                      <div className="text-[10px] text-slate-400">Trigger Animation:</div>
                       <select
                         value={getSelectedAnimIdForOneShot()}
                         onChange={(e) => handleAssignOneShotClip(e.target.value)}
-                        className="input-field text-[11px] py-1 w-full"
+                        className="input-field text-[11px] py-1 w-full font-mono"
                       >
-                        <option value="" disabled>-- Select Animation --</option>
+                        <option value="" disabled>-- Select Action Animation --</option>
                         {animations.map((a) => (
                           <option key={a.id} value={a.id}>
-                            🎬 {a.name} ({a.frameIds.length} frames)
+                            ⚡ {a.name} ({a.frameIds.length} frames)
                           </option>
                         ))}
                       </select>
@@ -1055,7 +1325,10 @@ export function StateGraphModal({
                 {/* Set as Default State */}
                 {defaultState !== selectedState.id && (
                   <button
-                    onClick={() => notifyUpdate({ ...localGraph, defaultState: selectedState.id })}
+                    onClick={() => {
+                      notifyUpdate({ ...localGraph, defaultState: selectedState.id }, true);
+                      showToast(`Set ${selectedState.id} as default state`);
+                    }}
                     className="btn btn-secondary text-xs w-full py-1.5 flex items-center justify-center gap-1 text-amber-400 border-amber-500/30"
                   >
                     <Check size={13} />
@@ -1067,8 +1340,9 @@ export function StateGraphModal({
                 {defaultState !== selectedState.id && (
                   <button
                     onClick={() => {
-                      notifyUpdate(removeStateFromGraph(localGraph, selectedState.id));
+                      notifyUpdate(removeStateFromGraph(localGraph, selectedState.id), true);
                       setSelectedItem(null);
+                      showToast(`Deleted state: ${selectedState.id}`);
                     }}
                     className="btn bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 text-xs w-full py-1.5 flex items-center justify-center gap-1"
                   >
@@ -1112,9 +1386,9 @@ export function StateGraphModal({
                     Unity Mecanim Controls:
                   </div>
                   <ul className="list-disc list-inside space-y-0.5 text-slate-400 text-[10px]">
-                    <li>Drag nodes by their header to move them.</li>
-                    <li>Drag from the <span className="text-white font-bold">+</span> handle to create transition arrows.</li>
-                    <li>Click any arrow or rule pill to edit conditions.</li>
+                    <li>Drag nodes by header to reposition smoothly.</li>
+                    <li>Click or drag from <span className="text-blue-400 font-bold">+</span> port to connect to any target state.</li>
+                    <li>Click any transition arrow to edit rules.</li>
                   </ul>
                 </div>
               </div>
