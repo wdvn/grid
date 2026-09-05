@@ -938,6 +938,8 @@ export function AnimationPreview({
           graphConfig={graphConfig}
           onUpdateGraphConfig={setCustomGraphConfig}
           currentActiveStateId={activeStateId}
+          animations={animations}
+          frames={frames}
         />
       )}
     </div>

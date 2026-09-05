@@ -18,7 +18,8 @@ import {
   Move,
   ChevronRight,
   Info,
-  Link2
+  Link2,
+  Compass
 } from 'lucide-react';
 import {
   addTransitionToGraph,
@@ -34,7 +35,9 @@ export function StateGraphModal({
   onClose,
   graphConfig,
   onUpdateGraphConfig,
-  currentActiveStateId = 'Idle'
+  currentActiveStateId = 'Idle',
+  animations = [],
+  frames = []
 }) {
   const [localGraph, setLocalGraph] = useState(graphConfig);
   const [selectedItem, setSelectedItem] = useState(null); // { type: 'state', id } | { type: 'transition', id }
@@ -244,6 +247,82 @@ export function StateGraphModal({
   const selectedState = selectedItem?.type === 'state'
     ? states[selectedItem.id]
     : null;
+
+  // Directional clip assignment helpers for BlendSpace2D (WASD Locomotion)
+  const handleAssignDirClip = (dir, animId) => {
+    if (!selectedState) return;
+    const frameMap = new Map(frames.map(f => [f.id, f]));
+    const chosenAnim = animations.find(a => a.id === animId);
+    const resolvedFrames = chosenAnim ? chosenAnim.frameIds.map(id => frameMap.get(id)).filter(Boolean) : [];
+
+    const existingClips = selectedState.clips || {};
+    const existingClipIds = selectedState.clipIds || {};
+
+    const updatedState = {
+      ...selectedState,
+      clips: {
+        ...existingClips,
+        [dir]: resolvedFrames
+      },
+      clipIds: {
+        ...existingClipIds,
+        [dir]: animId
+      }
+    };
+
+    notifyUpdate({
+      ...localGraph,
+      states: {
+        ...states,
+        [selectedState.id]: updatedState
+      }
+    });
+  };
+
+  const getSelectedAnimIdForDir = (dir) => {
+    if (selectedState?.clipIds && selectedState.clipIds[dir]) {
+      return selectedState.clipIds[dir];
+    }
+    const dirFrames = selectedState?.clips?.[dir] || [];
+    if (dirFrames.length === 0) return '';
+    const dirFrameIds = new Set(dirFrames.map(f => f.id));
+    const matchedAnim = animations.find(a => 
+      a.frameIds.length === dirFrames.length && a.frameIds.every(id => dirFrameIds.has(id))
+    );
+    return matchedAnim ? matchedAnim.id : '';
+  };
+
+  const handleAssignOneShotClip = (animId) => {
+    if (!selectedState) return;
+    const frameMap = new Map(frames.map(f => [f.id, f]));
+    const chosenAnim = animations.find(a => a.id === animId);
+    const resolvedFrames = chosenAnim ? chosenAnim.frameIds.map(id => frameMap.get(id)).filter(Boolean) : [];
+
+    const updatedState = {
+      ...selectedState,
+      clip: resolvedFrames,
+      clipId: animId
+    };
+
+    notifyUpdate({
+      ...localGraph,
+      states: {
+        ...states,
+        [selectedState.id]: updatedState
+      }
+    });
+  };
+
+  const getSelectedAnimIdForOneShot = () => {
+    if (selectedState?.clipId) return selectedState.clipId;
+    const clipFrames = selectedState?.clip || [];
+    if (clipFrames.length === 0) return '';
+    const clipFrameIds = new Set(clipFrames.map(f => f.id));
+    const matchedAnim = animations.find(a =>
+      a.frameIds.length === clipFrames.length && a.frameIds.every(id => clipFrameIds.has(id))
+    );
+    return matchedAnim ? matchedAnim.id : '';
+  };
 
   return createPortal(
     <div className="modal-overlay">
@@ -834,6 +913,144 @@ export function StateGraphModal({
                     <option value="SingleClip">SingleClip</option>
                   </select>
                 </div>
+
+                {/* Directional WASD Animation Mapping (BlendSpace2D) */}
+                {selectedState.type === 'BlendSpace2D' && (
+                  <div className="space-y-2 pt-2 border-t border-white/10">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[10px] text-blue-300 font-bold uppercase tracking-wider flex items-center gap-1">
+                        <Compass size={12} /> WASD Animation Mapping
+                      </label>
+                      <span className="text-[9px] text-slate-500 font-mono">4 Directions</span>
+                    </div>
+
+                    <div className="space-y-1.5 font-mono text-xs">
+                      {/* W - Up (North) */}
+                      <div className="bg-slate-950/80 p-2 rounded-lg border border-white/5 space-y-1">
+                        <div className="flex items-center justify-between text-[10px]">
+                          <span className="text-blue-400 font-bold flex items-center gap-1.5">
+                            <kbd className="px-1.5 py-0.5 bg-blue-600/30 text-blue-300 rounded border border-blue-500/40 text-[10px]">W</kbd>
+                            <span>Up (North)</span>
+                          </span>
+                          <span className="text-slate-500 text-[9px]">moveY &gt; 0</span>
+                        </div>
+                        <select
+                          value={getSelectedAnimIdForDir('up')}
+                          onChange={(e) => handleAssignDirClip('up', e.target.value)}
+                          className="input-field text-[11px] py-1 w-full"
+                        >
+                          <option value="" disabled>-- Select Animation --</option>
+                          {animations.map((a) => (
+                            <option key={a.id} value={a.id}>
+                              🎬 {a.name} ({a.frameIds.length} frames)
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* S - Down (South) */}
+                      <div className="bg-slate-950/80 p-2 rounded-lg border border-white/5 space-y-1">
+                        <div className="flex items-center justify-between text-[10px]">
+                          <span className="text-blue-400 font-bold flex items-center gap-1.5">
+                            <kbd className="px-1.5 py-0.5 bg-blue-600/30 text-blue-300 rounded border border-blue-500/40 text-[10px]">S</kbd>
+                            <span>Down (South)</span>
+                          </span>
+                          <span className="text-slate-500 text-[9px]">moveY &lt; 0</span>
+                        </div>
+                        <select
+                          value={getSelectedAnimIdForDir('down')}
+                          onChange={(e) => handleAssignDirClip('down', e.target.value)}
+                          className="input-field text-[11px] py-1 w-full"
+                        >
+                          <option value="" disabled>-- Select Animation --</option>
+                          {animations.map((a) => (
+                            <option key={a.id} value={a.id}>
+                              🎬 {a.name} ({a.frameIds.length} frames)
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* A - Left (West) */}
+                      <div className="bg-slate-950/80 p-2 rounded-lg border border-white/5 space-y-1">
+                        <div className="flex items-center justify-between text-[10px]">
+                          <span className="text-blue-400 font-bold flex items-center gap-1.5">
+                            <kbd className="px-1.5 py-0.5 bg-blue-600/30 text-blue-300 rounded border border-blue-500/40 text-[10px]">A</kbd>
+                            <span>Left (West)</span>
+                          </span>
+                          <span className="text-slate-500 text-[9px]">moveX &lt; 0</span>
+                        </div>
+                        <select
+                          value={getSelectedAnimIdForDir('left')}
+                          onChange={(e) => handleAssignDirClip('left', e.target.value)}
+                          className="input-field text-[11px] py-1 w-full"
+                        >
+                          <option value="" disabled>-- Select Animation --</option>
+                          {animations.map((a) => (
+                            <option key={a.id} value={a.id}>
+                              🎬 {a.name} ({a.frameIds.length} frames)
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* D - Right (East) */}
+                      <div className="bg-slate-950/80 p-2 rounded-lg border border-white/5 space-y-1">
+                        <div className="flex items-center justify-between text-[10px]">
+                          <span className="text-blue-400 font-bold flex items-center gap-1.5">
+                            <kbd className="px-1.5 py-0.5 bg-blue-600/30 text-blue-300 rounded border border-blue-500/40 text-[10px]">D</kbd>
+                            <span>Right (East)</span>
+                          </span>
+                          <span className="text-slate-500 text-[9px]">moveX &gt; 0</span>
+                        </div>
+                        <select
+                          value={getSelectedAnimIdForDir('right')}
+                          onChange={(e) => handleAssignDirClip('right', e.target.value)}
+                          className="input-field text-[11px] py-1 w-full"
+                        >
+                          <option value="" disabled>-- Select Animation --</option>
+                          {animations.map((a) => (
+                            <option key={a.id} value={a.id}>
+                              🎬 {a.name} ({a.frameIds.length} frames)
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* OneShot / Action Clip Mapping */}
+                {(selectedState.type === 'OneShot' || selectedState.type === 'SingleClip') && (
+                  <div className="space-y-2 pt-2 border-t border-white/10">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[10px] text-amber-300 font-bold uppercase tracking-wider flex items-center gap-1">
+                        <Zap size={12} /> Action Animation Clip
+                      </label>
+                      <span className="text-[9px] text-slate-500 font-mono">Space Key</span>
+                    </div>
+                    <div className="bg-slate-950/80 p-2 rounded-lg border border-white/5 space-y-1">
+                      <div className="flex items-center justify-between text-[10px]">
+                        <span className="text-amber-400 font-bold flex items-center gap-1.5">
+                          <kbd className="px-1.5 py-0.5 bg-amber-500/20 text-amber-300 rounded border border-amber-500/30 text-[10px]">Space</kbd>
+                          <span>Trigger Clip</span>
+                        </span>
+                      </div>
+                      <select
+                        value={getSelectedAnimIdForOneShot()}
+                        onChange={(e) => handleAssignOneShotClip(e.target.value)}
+                        className="input-field text-[11px] py-1 w-full"
+                      >
+                        <option value="" disabled>-- Select Animation --</option>
+                        {animations.map((a) => (
+                          <option key={a.id} value={a.id}>
+                            🎬 {a.name} ({a.frameIds.length} frames)
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                )}
 
                 {/* Set as Default State */}
                 {defaultState !== selectedState.id && (
