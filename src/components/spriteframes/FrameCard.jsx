@@ -13,11 +13,15 @@ export const FrameCard = React.memo(function FrameCard({
   isPlaybackActive,
   totalFrames,
   imageElement,
+  sheetMap,
   onSelectFrame,
   onMoveEarlier,
   onMoveLater,
   onRemove
 }) {
+  const sheet = frame.sheetId && sheetMap ? sheetMap.get(frame.sheetId) : null;
+  const effectiveImageElement = sheet?.imageElement || imageElement;
+
   return (
     <div
       data-frame-id={frame.id}
@@ -30,8 +34,8 @@ export const FrameCard = React.memo(function FrameCard({
           : 'border-white/10 bg-slate-900/90 hover:bg-slate-850 hover:border-white/20'
       }`}
     >
-      {/* Top Tag: Godot Index #0, #1... & Dimensions */}
-      <div className="w-full flex items-center justify-between text-[10px] font-mono px-1 py-0.5 z-10 bg-slate-950/85 rounded border border-white/10 flex-shrink-0">
+      {/* Top Tag: Godot Index #0, #1... & Sheet Badge or Dimensions */}
+      <div className="w-full flex items-center justify-between text-[10px] font-mono px-1 py-0.5 z-10 bg-slate-950/85 rounded border border-white/10 flex-shrink-0 gap-1">
         <span
           className={`font-bold ${
             isPlaybackActive
@@ -43,9 +47,18 @@ export const FrameCard = React.memo(function FrameCard({
         >
           #{idx}
         </span>
-        <span className="text-[9px] text-slate-400 font-mono">
-          {frame.w}×{frame.h}
-        </span>
+        {sheet ? (
+          <span
+            className="text-[8px] font-mono px-1 py-0 rounded bg-blue-500/25 text-blue-300 border border-blue-500/40 truncate max-w-[46px]"
+            title={`Sheet: ${sheet.name}`}
+          >
+            {sheet.name}
+          </span>
+        ) : (
+          <span className="text-[9px] text-slate-400 font-mono">
+            {frame.w}×{frame.h}
+          </span>
+        )}
       </div>
 
       {/* Thumbnail Preview */}
@@ -53,7 +66,7 @@ export const FrameCard = React.memo(function FrameCard({
         className="w-full flex-1 bg-checkerboard rounded relative overflow-hidden flex items-center justify-center my-0.5"
         style={{ width: '100%', minHeight: '44px', position: 'relative' }}
       >
-        <FrameThumbnail imageElement={imageElement} frame={frame} />
+        <FrameThumbnail imageElement={effectiveImageElement} frame={frame} />
       </div>
 
       {/* Bottom Bar: Frame Name & Duration Multiplier */}

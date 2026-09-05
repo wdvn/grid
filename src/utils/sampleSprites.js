@@ -103,7 +103,151 @@ export function createFoxSpritePreset(type = 'fox_run') {
     };
   }
 
+  if (type === 'fox_hurt') {
+    // 128x128 (4 cols x 4 rows of 32x32)
+    const frames = [];
+    const dirNames = ['down', 'up', 'right', 'left'];
+    for (let r = 0; r < 4; r++) {
+      for (let c = 0; c < 4; c++) {
+        const frameNum = r * 4 + c + 1;
+        frames.push({
+          id: `fox_hurt_${frameNum}`,
+          name: `fox_hurt_${dirNames[r]}_${c + 1}`,
+          x: c * 32,
+          y: r * 32,
+          w: 32,
+          h: 32,
+          pivotX: 0.5,
+          pivotY: 0.85,
+          row: r,
+          direction: dirNames[r]
+        });
+      }
+    }
+    return {
+      dataUrl: '/assets/Fox_Hurt.png',
+      name: 'Fox Hurt (128×128)',
+      defaultWidth: 32,
+      defaultHeight: 32,
+      count: 16,
+      initialFrames: frames
+    };
+  }
+
+  if (type === 'fox_death') {
+    // 192x128 (6 cols x 4 rows of 32x32)
+    const frames = [];
+    const dirNames = ['down', 'up', 'right', 'left'];
+    for (let r = 0; r < 4; r++) {
+      for (let c = 0; c < 6; c++) {
+        const frameNum = r * 6 + c + 1;
+        frames.push({
+          id: `fox_death_${frameNum}`,
+          name: `fox_death_${dirNames[r]}_${c + 1}`,
+          x: c * 32,
+          y: r * 32,
+          w: 32,
+          h: 32,
+          pivotX: 0.5,
+          pivotY: 0.85,
+          row: r,
+          direction: dirNames[r]
+        });
+      }
+    }
+    return {
+      dataUrl: '/assets/Fox_Death.png',
+      name: 'Fox Death (192×128)',
+      defaultWidth: 32,
+      defaultHeight: 32,
+      count: 24,
+      initialFrames: frames
+    };
+  }
+
   return createFoxSpritePreset('fox_run');
+}
+
+// Complete 4-Sheet Character Suite (Run, Idle, Hurt, Walk)
+export function createFullFoxCharacterSuite() {
+  const runPreset = createFoxSpritePreset('fox_run');
+  const idlePreset = createFoxSpritePreset('fox_idle');
+  const hurtPreset = createFoxSpritePreset('fox_hurt');
+  const walkPreset = createFoxSpritePreset('fox_walk');
+
+  const sheets = [
+    {
+      id: 'sheet_run',
+      name: 'Run',
+      dataUrl: runPreset.dataUrl,
+      width: 192,
+      height: 128,
+      initialFrames: runPreset.initialFrames.map(f => ({ ...f, sheetId: 'sheet_run' }))
+    },
+    {
+      id: 'sheet_idle',
+      name: 'Idle',
+      dataUrl: idlePreset.dataUrl,
+      width: 128,
+      height: 128,
+      initialFrames: idlePreset.initialFrames.map(f => ({ ...f, sheetId: 'sheet_idle' }))
+    },
+    {
+      id: 'sheet_hurt',
+      name: 'Hurt',
+      dataUrl: hurtPreset.dataUrl,
+      width: 128,
+      height: 128,
+      initialFrames: hurtPreset.initialFrames.map(f => ({ ...f, sheetId: 'sheet_hurt' }))
+    },
+    {
+      id: 'sheet_walk',
+      name: 'Walk',
+      dataUrl: walkPreset.dataUrl,
+      width: 192,
+      height: 128,
+      initialFrames: walkPreset.initialFrames.map(f => ({ ...f, sheetId: 'sheet_walk' }))
+    }
+  ];
+
+  // Combined frames with sheetId
+  const allFrames = [
+    ...sheets[0].initialFrames,
+    ...sheets[1].initialFrames,
+    ...sheets[2].initialFrames,
+    ...sheets[3].initialFrames
+  ];
+
+  // Animation clips referencing their respective sheets
+  const animations = [
+    // Idle 4-way (from Idle sheet)
+    { id: 'anim_idle_down', name: 'idle_down', fps: 6, loop: true, frameIds: sheets[1].initialFrames.slice(0, 4).map(f => f.id) },
+    { id: 'anim_idle_up', name: 'idle_up', fps: 6, loop: true, frameIds: sheets[1].initialFrames.slice(4, 8).map(f => f.id) },
+    { id: 'anim_idle_right', name: 'idle_right', fps: 6, loop: true, frameIds: sheets[1].initialFrames.slice(8, 12).map(f => f.id) },
+    { id: 'anim_idle_left', name: 'idle_left', fps: 6, loop: true, frameIds: sheets[1].initialFrames.slice(12, 16).map(f => f.id) },
+
+    // Run 4-way (from Run sheet)
+    { id: 'anim_run_down', name: 'run_down', fps: 10, loop: true, frameIds: sheets[0].initialFrames.slice(0, 6).map(f => f.id) },
+    { id: 'anim_run_up', name: 'run_up', fps: 10, loop: true, frameIds: sheets[0].initialFrames.slice(6, 12).map(f => f.id) },
+    { id: 'anim_run_right', name: 'run_right', fps: 10, loop: true, frameIds: sheets[0].initialFrames.slice(12, 18).map(f => f.id) },
+    { id: 'anim_run_left', name: 'run_left', fps: 10, loop: true, frameIds: sheets[0].initialFrames.slice(18, 24).map(f => f.id) },
+
+    // Action / Hurt (from Hurt sheet)
+    { id: 'anim_hurt', name: 'action_hurt', fps: 8, loop: false, frameIds: sheets[2].initialFrames.slice(0, 4).map(f => f.id) },
+
+    // Walk 4-way (from Walk sheet)
+    { id: 'anim_walk_down', name: 'walk_down', fps: 8, loop: true, frameIds: sheets[3].initialFrames.slice(0, 6).map(f => f.id) },
+    { id: 'anim_walk_up', name: 'walk_up', fps: 8, loop: true, frameIds: sheets[3].initialFrames.slice(6, 12).map(f => f.id) },
+    { id: 'anim_walk_right', name: 'walk_right', fps: 8, loop: true, frameIds: sheets[3].initialFrames.slice(12, 18).map(f => f.id) },
+    { id: 'anim_walk_left', name: 'walk_left', fps: 8, loop: true, frameIds: sheets[3].initialFrames.slice(18, 24).map(f => f.id) },
+  ];
+
+  return {
+    sheets,
+    allFrames,
+    animations,
+    defaultSheetId: 'sheet_run'
+  };
 }
 
 export function createSampleSpriteSheet(type = 'pixel_hero') {

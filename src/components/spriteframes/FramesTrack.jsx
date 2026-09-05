@@ -8,6 +8,7 @@ import { EmptyFramesState } from './EmptyFramesState';
  */
 export function FramesTrack({
   imageElement,
+  sheetMap,
   frames = [],
   activeAnimation,
   activeFrames = [],
@@ -115,6 +116,7 @@ export function FramesTrack({
               isPlaybackActive={isPlaybackActive}
               totalFrames={activeFrames.length}
               imageElement={imageElement}
+              sheetMap={sheetMap}
               onSelectFrame={onSelectFrame}
               onMoveEarlier={() => {
                 if (idx > 0 && activeAnimation) {

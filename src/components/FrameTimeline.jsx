@@ -8,6 +8,7 @@ import { AnimationsList, FramesTrack } from './spriteframes';
  */
 export function FrameTimeline({
   imageElement,
+  sheetMap,
   frames = [],
   selectedFrameId,
   onSelectFrame,
@@ -96,6 +97,7 @@ export function FrameTimeline({
         {/* Right Column: Animation Frames Track */}
         <FramesTrack
           imageElement={imageElement}
+          sheetMap={sheetMap}
           frames={frames}
           activeAnimation={activeAnimation}
           activeFrames={activeFrames}

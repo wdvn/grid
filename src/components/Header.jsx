@@ -4,8 +4,10 @@ import { createSampleSpriteSheet, createFoxSpritePreset } from '../utils/sampleS
 
 export function Header({
   imageSrc,
+  sheets = [],
   onFileUpload,
   onLoadSample,
+  onLoadCharacterSuite,
   onClear,
   onOpenExportModal,
   onOpenImportAtlasModal,
@@ -55,8 +57,30 @@ export function Header({
             style={{ minWidth: '280px', display: isDropdownOpen ? 'block' : undefined }}
           >
             <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-2.5 py-1 mb-1 border-b border-white/5">
-              Demo Sprite Sheets:
+              Character Suites & Sprites:
             </div>
+
+            {/* Full Fox Character Suite (4 Sheets: Run, Idle, Hurt, Walk) */}
+            <button
+              onClick={() => {
+                setIsDropdownOpen(false);
+                onLoadCharacterSuite?.();
+              }}
+              className="dropdown-item bg-amber-500/10 border-b border-white/10"
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-lg">✨</span>
+                <div className="flex flex-col">
+                  <span className="text-amber-300 font-bold flex items-center gap-1.5">
+                    Full Character Suite <span className="text-[9px] bg-amber-500/30 text-amber-200 px-1 py-0.5 rounded">4 Sheets</span>
+                  </span>
+                  <span className="text-[10px] text-slate-400">Run + Idle + Hurt + Walk (Complete Flow)</span>
+                </div>
+              </div>
+              <span className="text-[10px] font-mono text-emerald-400 font-bold bg-slate-800 px-1.5 py-0.5 rounded">
+                72f
+              </span>
+            </button>
 
             {/* Fox Run - Primary requested asset */}
             <button
@@ -218,7 +242,7 @@ export function Header({
               title="Export frames or JSON atlas"
             >
               <Download size={14} />
-              <span>Export Atlas ({frameCount})</span>
+              <span>Export Atlas ({sheets.length > 1 ? `${sheets.length} Sheets, ` : ''}{frameCount})</span>
             </button>
           </>
         )}

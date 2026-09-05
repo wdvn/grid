@@ -25,6 +25,8 @@ import { StateGraphModal } from './StateGraphModal';
 
 export function AnimationPreview({
   imageElement,
+  sheets = [],
+  sheetMap,
   frames,
   selectedFrameId,
   onSelectFrame,
@@ -99,8 +101,8 @@ export function AnimationPreview({
   // CHARACTER STATE MACHINE ENGINE INTEGRATION
   // ==========================================
   const defaultGraph = useMemo(() => {
-    return createDefaultCharacterGraph(frames);
-  }, [frames]);
+    return createDefaultCharacterGraph(frames, animations);
+  }, [frames, animations]);
 
   const [customGraphConfig, setCustomGraphConfig] = useState(null);
   const graphConfig = customGraphConfig || defaultGraph;
@@ -372,9 +374,10 @@ export function AnimationPreview({
       ctx.fill();
 
       // Draw Sprite with 0% distortion and razor-sharp pixels
+      const frameImg = (activeFrame?.sheetId && sheetMap?.get(activeFrame.sheetId)?.imageElement) || imageElement;
       ctx.globalAlpha = 1.0;
       ctx.drawImage(
-        imageElement,
+        frameImg,
         activeFrame.x,
         activeFrame.y,
         activeFrame.w,
@@ -385,7 +388,7 @@ export function AnimationPreview({
         drawH
       );
     }
-  }, [imageElement, frames, zoomScale, isStationary]);
+  }, [imageElement, sheetMap, frames, zoomScale, isStationary]);
 
   // High-Performance 60 FPS Game Loop for Character Mode (Buttery-smooth movement & frame timing)
   useEffect(() => {
@@ -513,9 +516,10 @@ export function AnimationPreview({
       const prevIdx = (currentFrameIndex - 1 + activeFrames.length) % activeFrames.length;
       const prevFrame = activeFrames[prevIdx];
       if (prevFrame && prevFrame.w > 0 && prevFrame.h > 0) {
+        const prevImg = (prevFrame.sheetId && sheetMap?.get(prevFrame.sheetId)?.imageElement) || imageElement;
         ctx.globalAlpha = 0.25;
         ctx.drawImage(
-          imageElement,
+          prevImg,
           prevFrame.x,
           prevFrame.y,
           prevFrame.w,
@@ -528,9 +532,10 @@ export function AnimationPreview({
       }
     }
 
+    const frameImg = (activeFrame.sheetId && sheetMap?.get(activeFrame.sheetId)?.imageElement) || imageElement;
     ctx.globalAlpha = 1.0;
     ctx.drawImage(
-      imageElement,
+      frameImg,
       activeFrame.x,
       activeFrame.y,
       activeFrame.w,
@@ -540,7 +545,7 @@ export function AnimationPreview({
       canvas.width,
       canvas.height
     );
-  }, [previewMode, currentFrameIndex, activeFrames, zoomScale, onionSkin, imageElement]);
+  }, [previewMode, currentFrameIndex, activeFrames, zoomScale, onionSkin, imageElement, sheetMap]);
 
   // Background style helper
   const getBgStyleClass = () => {

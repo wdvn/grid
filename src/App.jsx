@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Header } from './components/Header';
 import { CanvasWorkspace } from './components/CanvasWorkspace';
 import { FrameProperties } from './components/FrameProperties';
@@ -8,18 +8,31 @@ import { QuickGridModal } from './components/QuickGridModal';
 import { ExportModal } from './components/ExportModal';
 import { ImportAtlasModal } from './components/ImportAtlasModal';
 
-import { createSampleSpriteSheet, createFoxSpritePreset } from './utils/sampleSprites';
+import { createSampleSpriteSheet, createFoxSpritePreset, createFullFoxCharacterSuite } from './utils/sampleSprites';
 import { autoDetectSprites } from './utils/autoDetectSprites';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { generateDefaultAnimations, createNewAnimation, groupFramesByRows } from './utils/animationClips';
 
 export default function App() {
-  // Sprite Sheet Image State
-  const [imageSrc, setImageSrc] = useState(null);
-  const [imageDimensions, setImageDimensions] = useState({ width: 0, height: 0 });
-  const [imageElement, setImageElement] = useState(null);
+  // Multi-Sheet Workspace State: Array of { id, name, imageSrc, imageDimensions, imageElement }
+  const [sheets, setSheets] = useState([]);
+  const [activeSheetId, setActiveSheetId] = useState(null);
 
-  // Frames & Selection
+  // Active Sheet & Sheet Lookup Map
+  const activeSheet = useMemo(() => {
+    return sheets.find((s) => s.id === activeSheetId) || sheets[0] || null;
+  }, [sheets, activeSheetId]);
+
+  const sheetMap = useMemo(() => {
+    return new Map(sheets.map((s) => [s.id, s]));
+  }, [sheets]);
+
+  // Derived properties of the active sheet for backwards-compatibility
+  const imageSrc = activeSheet?.imageSrc || null;
+  const imageDimensions = activeSheet?.imageDimensions || { width: 0, height: 0 };
+  const imageElement = activeSheet?.imageElement || null;
+
+  // Frames & Selection across all sheets (each frame has sheetId)
   const [frames, setFrames] = useState([]);
   const [selectedFrameId, setSelectedFrameId] = useState(null);
 
@@ -37,33 +50,72 @@ export default function App() {
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [isImportAtlasModalOpen, setIsImportAtlasModalOpen] = useState(false);
 
-  // Load Fox Run sample on first render as requested
+  // Load Full 4-Sheet Character Suite (Run, Idle, Hurt, Walk) on first render
   useEffect(() => {
-    const foxPreset = createFoxSpritePreset('fox_run');
-    loadSpriteImage(foxPreset.dataUrl, foxPreset.initialFrames);
+    handleLoadCharacterSuite();
   }, []);
 
-  // Helper to load image & measure dimensions
-  const loadSpriteImage = useCallback((src, initialFrames = null) => {
+  // Multi-Sheet Character Suite Loader: Loads Run, Idle, Hurt, Walk into one unified workspace
+  const handleLoadCharacterSuite = useCallback(() => {
+    const suite = createFullFoxCharacterSuite();
+
+    Promise.all(
+      suite.sheets.map((s) => {
+        return new Promise((resolve) => {
+          const img = new Image();
+          img.crossOrigin = 'anonymous';
+          img.onload = () => {
+            resolve({
+              id: s.id,
+              name: s.name,
+              imageSrc: s.dataUrl,
+              imageDimensions: { width: s.width, height: s.height },
+              imageElement: img
+            });
+          };
+          img.src = s.dataUrl;
+        });
+      })
+    ).then((loadedSheets) => {
+      setSheets(loadedSheets);
+      setActiveSheetId(suite.defaultSheetId);
+      setFrames(suite.allFrames);
+      setSelectedFrameId(suite.allFrames[0]?.id || null);
+      setAnimations(suite.animations);
+      setSelectedAnimationId(suite.animations[0]?.id || null);
+    });
+  }, []);
+
+  // Helper to load single image & replace sheets (e.g. from Samples dropdown)
+  const loadSpriteImage = useCallback((src, initialFrames = null, sheetName = 'Sheet 1') => {
     const img = new Image();
     img.crossOrigin = 'anonymous';
     img.onload = () => {
-      setImageElement(img);
-      setImageSrc(src);
-      setImageDimensions({ width: img.naturalWidth, height: img.naturalHeight });
+      const newSheetId = `sheet_${Date.now()}`;
+      const newSheet = {
+        id: newSheetId,
+        name: sheetName,
+        imageSrc: src,
+        imageDimensions: { width: img.naturalWidth, height: img.naturalHeight },
+        imageElement: img
+      };
+
+      setSheets([newSheet]);
+      setActiveSheetId(newSheetId);
 
       if (initialFrames && initialFrames.length > 0) {
-        setFrames(initialFrames);
-        setSelectedFrameId(initialFrames[0]?.id || null);
-        const anims = generateDefaultAnimations(initialFrames);
+        const tagged = initialFrames.map((f) => ({ ...f, sheetId: newSheetId }));
+        setFrames(tagged);
+        setSelectedFrameId(tagged[0]?.id || null);
+        const anims = generateDefaultAnimations(tagged);
         setAnimations(anims);
         setSelectedAnimationId(anims[0]?.id || null);
       } else {
-        // Run auto-detect on loaded image first!
         const detected = autoDetectSprites(img, 10, 1);
         if (detected.length > 0) {
           const newFrames = detected.map((box, i) => ({
             id: `auto_${Date.now()}_${i}`,
+            sheetId: newSheetId,
             name: `frame_${i + 1}`,
             x: box.x,
             y: box.y,
@@ -78,7 +130,6 @@ export default function App() {
           setAnimations(anims);
           setSelectedAnimationId(anims[0]?.id || null);
         } else {
-          // Fallback to 4 grid frames if image is fully transparent or solid
           const defaultW = Math.min(64, Math.floor(img.naturalWidth / 4) || 32);
           const defaultH = Math.min(64, img.naturalHeight);
           const defaultFrames = [];
@@ -87,6 +138,7 @@ export default function App() {
           for (let i = 0; i < count; i++) {
             defaultFrames.push({
               id: `frame_${Date.now()}_${i}`,
+              sheetId: newSheetId,
               name: `frame_${i + 1}`,
               x: i * defaultW,
               y: 0,
@@ -107,17 +159,152 @@ export default function App() {
     img.src = src;
   }, []);
 
-  // File Upload handler
+  // Add new Sheet from uploaded image file
+  const handleAddSheetFile = (file) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const src = e.target.result;
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        const sheetName = file.name.replace(/\.[^/.]+$/, "");
+        const newSheetId = `sheet_${Date.now()}`;
+        const newSheet = {
+          id: newSheetId,
+          name: sheetName,
+          imageSrc: src,
+          imageDimensions: { width: img.naturalWidth, height: img.naturalHeight },
+          imageElement: img
+        };
+
+        const detected = autoDetectSprites(img, 10, 1);
+        let newFrames = [];
+        if (detected.length > 0) {
+          newFrames = detected.map((box, i) => ({
+            id: `auto_${Date.now()}_${i}`,
+            sheetId: newSheetId,
+            name: `${sheetName}_${i + 1}`,
+            x: box.x,
+            y: box.y,
+            w: box.w,
+            h: box.h,
+            pivotX: 0.5,
+            pivotY: 0.5
+          }));
+        } else {
+          const defaultW = Math.min(64, Math.floor(img.naturalWidth / 4) || 32);
+          const defaultH = Math.min(64, img.naturalHeight);
+          const count = Math.min(4, Math.floor(img.naturalWidth / defaultW));
+          for (let i = 0; i < count; i++) {
+            newFrames.push({
+              id: `frame_${Date.now()}_${i}`,
+              sheetId: newSheetId,
+              name: `${sheetName}_${i + 1}`,
+              x: i * defaultW,
+              y: 0,
+              w: defaultW,
+              h: defaultH,
+              pivotX: 0.5,
+              pivotY: 0.5
+            });
+          }
+        }
+
+        setSheets((prev) => [...prev, newSheet]);
+        setActiveSheetId(newSheetId);
+        setFrames((prev) => [...prev, ...newFrames]);
+        setSelectedFrameId(newFrames[0]?.id || null);
+
+        if (newFrames.length > 0) {
+          const newAnim = {
+            id: `anim_${Date.now()}`,
+            name: sheetName.toLowerCase(),
+            fps: 10,
+            loop: true,
+            frameIds: newFrames.map(f => f.id)
+          };
+          setAnimations((prev) => [...prev, newAnim]);
+          setSelectedAnimationId(newAnim.id);
+        }
+      };
+      img.src = src;
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // Add new Sheet from built-in character preset
+  const handleAddSheetPreset = (presetType) => {
+    const preset = createFoxSpritePreset(presetType);
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      const typeClean = presetType.replace('fox_', '');
+      const sheetName = typeClean.charAt(0).toUpperCase() + typeClean.slice(1);
+      const newSheetId = `sheet_${typeClean}_${Date.now()}`;
+      const newSheet = {
+        id: newSheetId,
+        name: sheetName,
+        imageSrc: preset.dataUrl,
+        imageDimensions: { width: img.naturalWidth, height: img.naturalHeight },
+        imageElement: img
+      };
+
+      const taggedFrames = preset.initialFrames.map(f => ({
+        ...f,
+        id: `${newSheetId}_${f.id}`,
+        sheetId: newSheetId
+      }));
+
+      setSheets((prev) => [...prev, newSheet]);
+      setActiveSheetId(newSheetId);
+      setFrames((prev) => [...prev, ...taggedFrames]);
+      setSelectedFrameId(taggedFrames[0]?.id || null);
+
+      const newAnims = generateDefaultAnimations(taggedFrames).map(a => ({
+        ...a,
+        id: `${newSheetId}_${a.id}`,
+        name: `${sheetName.toLowerCase()}_${a.name}`
+      }));
+      setAnimations((prev) => [...prev, ...newAnims]);
+      if (newAnims[0]) setSelectedAnimationId(newAnims[0].id);
+    };
+    img.src = preset.dataUrl;
+  };
+
+  // Delete a Sheet
+  const handleDeleteSheet = (sheetId) => {
+    if (sheets.length <= 1) return;
+    setSheets((prev) => prev.filter((s) => s.id !== sheetId));
+    setFrames((prev) => prev.filter((f) => f.sheetId !== sheetId));
+    if (activeSheetId === sheetId) {
+      const remaining = sheets.filter((s) => s.id !== sheetId);
+      setActiveSheetId(remaining[0]?.id || null);
+    }
+  };
+
+  // Rename a Sheet
+  const handleRenameSheet = (sheetId, newName) => {
+    setSheets((prev) =>
+      prev.map((s) => (s.id === sheetId ? { ...s, name: newName } : s))
+    );
+  };
+
+  // Select active Sheet
+  const handleSelectSheet = (sheetId) => {
+    setActiveSheetId(sheetId);
+    const sheetFrames = frames.filter((f) => f.sheetId === sheetId);
+    if (sheetFrames.length > 0) {
+      setSelectedFrameId(sheetFrames[0].id);
+    }
+  };
+
+  // File Upload handler (from Header or Canvas)
   const handleFileUpload = (file) => {
     if (file.name.endsWith('.json') || file.type.includes('json')) {
       setIsImportAtlasModalOpen(true);
       return;
     }
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      loadSpriteImage(e.target.result);
-    };
-    reader.readAsDataURL(file);
+    handleAddSheetFile(file);
   };
 
   // Import Atlas JSON & Frames handler
@@ -125,39 +312,67 @@ export default function App() {
     if (imageFile) {
       const reader = new FileReader();
       reader.onload = (e) => {
-        loadSpriteImage(e.target.result, newFrames);
-        if (newAnims && newAnims.length > 0) {
-          setAnimations(newAnims);
-          setSelectedAnimationId(newAnims[0]?.id || null);
-        }
+        const src = e.target.result;
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => {
+          const sheetName = imageName || imageFile.name.replace(/\.[^/.]+$/, "");
+          const newSheetId = `sheet_${Date.now()}`;
+          const newSheet = {
+            id: newSheetId,
+            name: sheetName,
+            imageSrc: src,
+            imageDimensions: { width: img.naturalWidth, height: img.naturalHeight },
+            imageElement: img
+          };
+
+          const tagged = newFrames.map(f => ({ ...f, sheetId: newSheetId }));
+          setSheets(prev => [...prev, newSheet]);
+          setActiveSheetId(newSheetId);
+          setFrames(prev => [...prev, ...tagged]);
+          setSelectedFrameId(tagged[0]?.id || null);
+
+          if (newAnims && newAnims.length > 0) {
+            setAnimations(prev => [...prev, ...newAnims]);
+            setSelectedAnimationId(newAnims[0]?.id || null);
+          }
+        };
+        img.src = src;
       };
       reader.readAsDataURL(imageFile);
       return;
     }
 
+    // Applying to active sheet
+    const targetSheetId = activeSheetId || sheets[0]?.id || 'sheet_main';
+    const tagged = newFrames.map(f => ({ ...f, sheetId: targetSheetId }));
+
     if (imageSrc) {
       if (importMode === 'append') {
-        const combined = [...frames, ...newFrames];
+        const combined = [...frames, ...tagged];
         setFrames(combined);
-        setSelectedFrameId(newFrames[0]?.id || combined[0]?.id || null);
+        setSelectedFrameId(tagged[0]?.id || combined[0]?.id || null);
         if (newAnims && newAnims.length > 0) {
           setAnimations((prev) => [...prev, ...newAnims]);
         }
       } else {
-        setFrames(newFrames);
-        setSelectedFrameId(newFrames[0]?.id || null);
+        setFrames(prev => [
+          ...prev.filter(f => f.sheetId && f.sheetId !== targetSheetId),
+          ...tagged
+        ]);
+        setSelectedFrameId(tagged[0]?.id || null);
         if (newAnims && newAnims.length > 0) {
-          setAnimations(newAnims);
+          setAnimations(prev => [...prev, ...newAnims]);
           setSelectedAnimationId(newAnims[0]?.id || null);
         } else {
-          const anims = generateDefaultAnimations(newFrames);
-          setAnimations(anims);
+          const anims = generateDefaultAnimations(tagged);
+          setAnimations((prev) => [...prev, ...anims]);
           setSelectedAnimationId(anims[0]?.id || null);
         }
       }
     } else {
-      setFrames(newFrames);
-      setSelectedFrameId(newFrames[0]?.id || null);
+      setFrames(tagged);
+      setSelectedFrameId(tagged[0]?.id || null);
       if (newAnims && newAnims.length > 0) {
         setAnimations(newAnims);
         setSelectedAnimationId(newAnims[0]?.id || null);
@@ -169,6 +384,7 @@ export default function App() {
   const handleAddFrame = (frameData) => {
     const newFrame = {
       id: `frame_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+      sheetId: activeSheetId || sheets[0]?.id,
       name: `frame_${frames.length + 1}`,
       pivotX: 0.5,
       pivotY: 0.5,
@@ -193,60 +409,44 @@ export default function App() {
     let newX = frameToDup.x + frameToDup.w;
     let newY = frameToDup.y;
 
-    // Wrap to next line if exceeding image width
-    if (newX + frameToDup.w > imageDimensions.width) {
+    if (imageDimensions.width && newX + frameToDup.w > imageDimensions.width) {
       newX = 0;
       newY = frameToDup.y + frameToDup.h;
-    }
-
-    // Keep within bounds
-    if (newY + frameToDup.h > imageDimensions.height) {
-      newY = Math.max(0, imageDimensions.height - frameToDup.h);
     }
 
     const newFrame = {
       ...frameToDup,
       id: `frame_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
-      name: `${frameToDup.name || 'frame'}_copy`,
+      name: `${frameToDup.name}_copy`,
       x: newX,
-      y: newY
+      y: newY,
+      sheetId: frameToDup.sheetId || activeSheetId
     };
 
     setFrames((prev) => {
-      const idx = prev.findIndex((f) => f.id === frameToDup.id);
-      if (idx !== -1) {
-        const next = [...prev];
-        next.splice(idx + 1, 0, newFrame);
-        return next;
-      }
-      return [...prev, newFrame];
+      const idx = prev.findIndex((f) => f.id === (targetId || selectedFrameId));
+      if (idx === -1) return [...prev, newFrame];
+      const next = [...prev];
+      next.splice(idx + 1, 0, newFrame);
+      return next;
     });
 
-    // Also insert into active animation if it contains the source frame
-    setAnimations((prev) =>
-      prev.map((a) => {
-        if (a.id !== selectedAnimationId) return a;
-        const fIdx = a.frameIds.indexOf(frameToDup.id);
-        if (fIdx !== -1) {
-          const nextIds = [...a.frameIds];
-          nextIds.splice(fIdx + 1, 0, newFrame.id);
-          return { ...a, frameIds: nextIds };
-        }
-        return a;
-      })
-    );
-
     setSelectedFrameId(newFrame.id);
-  }, [frames, selectedFrameId, imageDimensions, selectedAnimationId]);
+  }, [frames, selectedFrameId, imageDimensions, activeSheetId]);
 
-  // Delete Frame
-  const handleDeleteFrame = useCallback((id) => {
+  // Delete Frame (Delete key logic)
+  const handleDeleteFrame = useCallback((targetId) => {
+    const id = targetId || selectedFrameId;
+    if (!id) return;
+
     setFrames((prev) => {
-      const next = prev.filter((f) => f.id !== id);
+      const idx = prev.findIndex((f) => f.id === id);
+      const filtered = prev.filter((f) => f.id !== id);
       if (selectedFrameId === id) {
-        setSelectedFrameId(next[0]?.id || null);
+        const nextSelected = filtered[idx] || filtered[idx - 1] || null;
+        setSelectedFrameId(nextSelected ? nextSelected.id : null);
       }
-      return next;
+      return filtered;
     });
     setAnimations((prev) =>
       prev.map((a) => ({
@@ -292,6 +492,8 @@ export default function App() {
       const is4Way = rows.length === 4;
       const dirLabels = ['down', 'up', 'right', 'left'];
 
+      const targetSheetId = activeSheetId || sheets[0]?.id;
+      const currentSheetName = activeSheet?.name || 'sprite';
       const newFrames = [];
       let globalIdx = 0;
 
@@ -299,11 +501,12 @@ export default function App() {
         row.forEach((box, colIdx) => {
           globalIdx++;
           const name = is4Way
-            ? `fox_run_${dirLabels[rowIdx]}_${colIdx + 1}`
-            : `sprite_r${rowIdx + 1}_${colIdx + 1}`;
+            ? `${currentSheetName.toLowerCase()}_${dirLabels[rowIdx]}_${colIdx + 1}`
+            : `${currentSheetName.toLowerCase()}_r${rowIdx + 1}_${colIdx + 1}`;
 
           newFrames.push({
             id: `auto_${Date.now()}_${globalIdx}`,
+            sheetId: targetSheetId,
             name,
             x: box.x,
             y: box.y,
@@ -316,33 +519,42 @@ export default function App() {
         });
       });
 
-      setFrames(newFrames);
+      setFrames(prev => [
+        ...prev.filter(f => f.sheetId && f.sheetId !== targetSheetId),
+        ...newFrames
+      ]);
       setSelectedFrameId(newFrames[0]?.id || null);
       const anims = generateDefaultAnimations(newFrames);
-      setAnimations(anims);
+      setAnimations(prev => [...prev, ...anims]);
       setSelectedAnimationId(anims[0]?.id || null);
     }
   };
 
   // Quick Grid application
   const handleApplyGrid = (newFrames, clearExisting) => {
+    const targetSheetId = activeSheetId || sheets[0]?.id;
+    const tagged = newFrames.map(f => ({ ...f, sheetId: targetSheetId }));
+
     if (clearExisting) {
-      setFrames(newFrames);
-      const anims = generateDefaultAnimations(newFrames);
-      setAnimations(anims);
+      setFrames(prev => [
+        ...prev.filter(f => f.sheetId && f.sheetId !== targetSheetId),
+        ...tagged
+      ]);
+      const anims = generateDefaultAnimations(tagged);
+      setAnimations((prev) => [...prev, ...anims]);
       setSelectedAnimationId(anims[0]?.id || null);
     } else {
-      setFrames((prev) => [...prev, ...newFrames]);
+      setFrames((prev) => [...prev, ...tagged]);
     }
-    if (newFrames.length > 0) {
-      setSelectedFrameId(newFrames[0].id);
+    if (tagged.length > 0) {
+      setSelectedFrameId(tagged[0].id);
     }
   };
 
   // Clear all workspace sprites and animations
   const handleClearAll = useCallback(() => {
-    setImageSrc(null);
-    setImageElement(null);
+    setSheets([]);
+    setActiveSheetId(null);
     setFrames([]);
     setSelectedFrameId(null);
     setAnimations([]);
@@ -377,15 +589,14 @@ export default function App() {
   }, [animations]);
 
   const handleDeleteAnimation = useCallback((animId) => {
-    if (animations.length <= 1) return;
     setAnimations((prev) => {
-      const next = prev.filter((a) => a.id !== animId);
+      const filtered = prev.filter((a) => a.id !== animId);
       if (selectedAnimationId === animId) {
-        setSelectedAnimationId(next[0]?.id || null);
+        setSelectedAnimationId(filtered[0]?.id || null);
       }
-      return next;
+      return filtered;
     });
-  }, [animations.length, selectedAnimationId]);
+  }, [selectedAnimationId]);
 
   const handleUpdateAnimation = useCallback((animId, updates) => {
     setAnimations((prev) =>
@@ -394,12 +605,10 @@ export default function App() {
   }, []);
 
   const handleAddFrameToAnimation = useCallback((animId, frameId) => {
-    if (!frameId) return;
     setAnimations((prev) =>
-      prev.map((a) => {
-        if (a.id !== animId) return a;
-        return { ...a, frameIds: [...a.frameIds, frameId] };
-      })
+      prev.map((a) =>
+        a.id === animId ? { ...a, frameIds: [...a.frameIds, frameId] } : a
+      )
     );
   }, []);
 
@@ -407,46 +616,35 @@ export default function App() {
     setAnimations((prev) =>
       prev.map((a) => {
         if (a.id !== animId) return a;
-        const nextIds = [...a.frameIds];
-        nextIds.splice(frameIndex, 1);
-        return { ...a, frameIds: nextIds };
+        const newIds = [...a.frameIds];
+        newIds.splice(frameIndex, 1);
+        return { ...a, frameIds: newIds };
       })
     );
   }, []);
 
-  const handleReorderAnimationFrames = useCallback((animId, fromIndex, toIndex) => {
+  const handleReorderAnimationFrames = useCallback((animId, fromIdx, toIdx) => {
     setAnimations((prev) =>
       prev.map((a) => {
         if (a.id !== animId) return a;
-        const nextIds = [...a.frameIds];
-        if (toIndex < 0 || toIndex >= nextIds.length) return a;
-        const [moved] = nextIds.splice(fromIndex, 1);
-        nextIds.splice(toIndex, 0, moved);
-        return { ...a, frameIds: nextIds };
+        const newIds = [...a.frameIds];
+        const [moved] = newIds.splice(fromIdx, 1);
+        newIds.splice(toIdx, 0, moved);
+        return { ...a, frameIds: newIds };
       })
     );
   }, []);
 
-  // Synchronized animation selection: switches preview directly to clip mode and plays it
-  const handleSelectAnimation = useCallback((animId) => {
+  const handleSelectAnimation = (animId) => {
     setSelectedAnimationId(animId);
-    setPreviewMode('clip');
     setPlaybackFrameIndex(0);
-    setIsAnimationPlaying(true);
-  }, []);
+  };
 
-  // Synchronized Play/Pause toggle: ensures preview is in clip mode and toggles playback
-  const handleTogglePlay = useCallback(() => {
-    setIsAnimationPlaying((prev) => {
-      const next = !prev;
-      if (next) {
-        setPreviewMode('clip');
-      }
-      return next;
-    });
-  }, []);
+  const handleTogglePlay = () => {
+    setIsAnimationPlaying((prev) => !prev);
+  };
 
-  // Setup Global Keyboard Shortcuts
+  // Keyboard Shortcuts Hook
   useKeyboardShortcuts({
     selectedFrameId,
     frames,
@@ -463,8 +661,10 @@ export default function App() {
       {/* Top Header Navbar */}
       <Header
         imageSrc={imageSrc}
+        sheets={sheets}
         onFileUpload={handleFileUpload}
-        onLoadSample={(sample) => loadSpriteImage(sample.dataUrl, sample.initialFrames)}
+        onLoadSample={(sample) => loadSpriteImage(sample.dataUrl, sample.initialFrames, sample.name)}
+        onLoadCharacterSuite={handleLoadCharacterSuite}
         onClear={handleClearAll}
         onOpenExportModal={() => setIsExportModalOpen(true)}
         onOpenImportAtlasModal={() => setIsImportAtlasModalOpen(true)}
@@ -483,10 +683,11 @@ export default function App() {
           onDeleteFrame={handleDeleteFrame}
           imageDimensions={imageDimensions}
           frames={frames}
+          sheetMap={sheetMap}
           onSelectFrame={setSelectedFrameId}
         />
 
-        {/* Center Column: Interactive Sprite Sheet Canvas */}
+        {/* Center Column: Interactive Sprite Sheet Canvas with Multi-Sheet Tab Bar */}
         <CanvasWorkspace
           imageSrc={imageSrc}
           imageDimensions={imageDimensions}
@@ -499,11 +700,20 @@ export default function App() {
           onOpenQuickGrid={() => setIsGridModalOpen(true)}
           onFileUpload={handleFileUpload}
           onOpenImportAtlasModal={() => setIsImportAtlasModalOpen(true)}
+          sheets={sheets}
+          activeSheetId={activeSheetId}
+          onSelectSheet={handleSelectSheet}
+          onAddSheetFile={handleAddSheetFile}
+          onAddSheetPreset={handleAddSheetPreset}
+          onDeleteSheet={handleDeleteSheet}
+          onRenameSheet={handleRenameSheet}
         />
 
-        {/* Right Column: Animation Preview Player */}
+        {/* Right Column: Animation Preview Player with Cross-Sheet Character Mode */}
         <AnimationPreview
           imageElement={imageElement}
+          sheets={sheets}
+          sheetMap={sheetMap}
           frames={frames}
           selectedFrameId={selectedFrameId}
           onSelectFrame={setSelectedFrameId}
@@ -523,6 +733,7 @@ export default function App() {
       <footer className="app-timeline">
         <FrameTimeline
           imageElement={imageElement}
+          sheetMap={sheetMap}
           frames={frames}
           selectedFrameId={selectedFrameId}
           onSelectFrame={setSelectedFrameId}

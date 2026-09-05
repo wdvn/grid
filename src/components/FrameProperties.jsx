@@ -9,7 +9,8 @@ export function FrameProperties({
   onDuplicateFrame,
   onDeleteFrame,
   onMoveFrameOrder,
-  imageDimensions
+  imageDimensions,
+  sheetMap
 }) {
   const selectedFrame = frames.find(f => f.id === selectedFrameId);
   const selectedIndex = frames.findIndex(f => f.id === selectedFrameId);
@@ -46,9 +47,16 @@ export function FrameProperties({
                     {idx + 1}
                   </span>
                   <div className="flex flex-col min-w-0">
-                    <span className="text-xs font-semibold text-slate-200 truncate">
-                      {frame.name || `frame_${idx + 1}`}
-                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs font-semibold text-slate-200 truncate">
+                        {frame.name || `frame_${idx + 1}`}
+                      </span>
+                      {frame.sheetId && sheetMap?.get(frame.sheetId) && (
+                        <span className="text-[8px] font-mono px-1 py-0 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30 truncate max-w-[45px]">
+                          {sheetMap.get(frame.sheetId).name}
+                        </span>
+                      )}
+                    </div>
                     <span className="text-[10px] text-slate-400 font-mono">
                       {frame.w}×{frame.h} px @ ({frame.x}, {frame.y})
                     </span>
@@ -98,6 +106,16 @@ export function FrameProperties({
       </div>
 
       <div className="flex-1 overflow-y-auto space-y-3 pr-0.5">
+        {/* Source Sheet Badge */}
+        {sheetMap && selectedFrame.sheetId && sheetMap.get(selectedFrame.sheetId) && (
+          <div className="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-slate-950/80 border border-white/5 text-xs font-mono">
+            <span className="text-slate-400">Source Sheet:</span>
+            <span className="text-blue-300 font-bold">
+              {sheetMap.get(selectedFrame.sheetId).name}
+            </span>
+          </div>
+        )}
+
         {/* Frame Name */}
         <div className="input-group">
           <label className="input-label">Frame Name (ID)</label>

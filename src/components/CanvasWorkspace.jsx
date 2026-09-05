@@ -1,5 +1,5 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { ZoomIn, ZoomOut, Maximize, RotateCcw, Move, Sparkles, Plus, Grid, Info, Hash, Target, FolderInput } from 'lucide-react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { ZoomIn, ZoomOut, Maximize, RotateCcw, Move, Sparkles, Plus, Grid, Info, Hash, Target, FolderInput, Layers, X, Edit2, Check, Upload } from 'lucide-react';
 
 export function CanvasWorkspace({
   imageSrc,
@@ -12,10 +12,27 @@ export function CanvasWorkspace({
   onAutoDetect,
   onOpenQuickGrid,
   onFileUpload,
-  onOpenImportAtlasModal
+  onOpenImportAtlasModal,
+  sheets = [],
+  activeSheetId,
+  onSelectSheet,
+  onAddSheetFile,
+  onAddSheetPreset,
+  onDeleteSheet,
+  onRenameSheet
 }) {
   const containerRef = useRef(null);
   const imgRef = useRef(null);
+
+  // Multi-sheet UI state
+  const [isAddSheetMenuOpen, setIsAddSheetMenuOpen] = useState(false);
+  const [editingSheetId, setEditingSheetId] = useState(null);
+  const [editingSheetName, setEditingSheetName] = useState('');
+
+  // Active sheet frames filter
+  const visibleFrames = useMemo(() => {
+    return frames.filter(f => !f.sheetId || f.sheetId === activeSheetId);
+  }, [frames, activeSheetId]);
 
   // Zoom & Pan state
   const [zoom, setZoom] = useState(1);
@@ -226,7 +243,7 @@ export function CanvasWorkspace({
 
       // Only create frame if drawn size is at least 4x4 px
       if (w >= 4 && h >= 4) {
-        onAddFrame({ x, y, w, h });
+        onAddFrame({ x, y, w, h, sheetId: activeSheetId });
       }
     }
 
@@ -270,16 +287,184 @@ export function CanvasWorkspace({
   return (
     <div
       ref={containerRef}
-      className="glass-panel relative flex-1 flex flex-col overflow-hidden select-none bg-checkerboard"
+      className="glass-panel relative flex-1 flex flex-col overflow-hidden select-none"
       style={{ position: 'relative', width: '100%', height: '100%' }}
-      onMouseDown={handleMouseDown}
-      onMouseMove={handleMouseMove}
-      onMouseUp={handleMouseUp}
-      onMouseLeave={handleMouseUp}
     >
-      {/* Canvas Viewport Controls Header Bar */}
-      {imageSrc && (
-        <div className="absolute top-3 left-3 right-3 z-30 flex items-center justify-between gap-2 pointer-events-none flex-wrap">
+      {/* Multi-Sheet Tab Bar */}
+      {sheets && sheets.length > 0 && (
+        <div className="z-30 flex items-center justify-between px-3 py-1.5 bg-slate-950/95 border-b border-white/10 backdrop-blur-md flex-shrink-0">
+          {/* Scrollable Sheet Tabs */}
+          <div className="flex items-center gap-1.5 overflow-x-auto py-0.5 no-scrollbar flex-1">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mr-1 flex items-center gap-1">
+              <Layers size={11} /> Sheets:
+            </span>
+            {sheets.map((sheet) => {
+              const isActive = sheet.id === activeSheetId;
+              const sheetFrameCount = frames.filter(f => f.sheetId === sheet.id).length;
+              const isEditing = editingSheetId === sheet.id;
+
+              return (
+                <div
+                  key={sheet.id}
+                  data-sheet-id={sheet.id}
+                  data-sheet-name={sheet.name}
+                  onClick={() => onSelectSheet?.(sheet.id)}
+                  onDoubleClick={() => {
+                    setEditingSheetId(sheet.id);
+                    setEditingSheetName(sheet.name);
+                  }}
+                  className={`sheet-tab group flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-mono transition-all cursor-pointer border ${
+                    isActive
+                      ? 'bg-blue-600/30 text-blue-300 border-blue-500/60 shadow-sm shadow-blue-500/20 font-bold'
+                      : 'bg-slate-900/70 text-slate-400 border-white/5 hover:border-white/20 hover:text-slate-200'
+                  }`}
+                >
+                  {isEditing ? (
+                    <input
+                      type="text"
+                      autoFocus
+                      value={editingSheetName}
+                      onChange={(e) => setEditingSheetName(e.target.value)}
+                      onBlur={() => {
+                        if (editingSheetName.trim()) {
+                          onRenameSheet?.(sheet.id, editingSheetName.trim());
+                        }
+                        setEditingSheetId(null);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          if (editingSheetName.trim()) {
+                            onRenameSheet?.(sheet.id, editingSheetName.trim());
+                          }
+                          setEditingSheetId(null);
+                        } else if (e.key === 'Escape') {
+                          setEditingSheetId(null);
+                        }
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                      className="bg-slate-950 border border-blue-500 text-white px-1 py-0 text-xs rounded w-20 outline-none"
+                    />
+                  ) : (
+                    <span className="truncate max-w-[110px]" title={sheet.name}>
+                      {sheet.name}
+                    </span>
+                  )}
+                  <span
+                    className={`text-[9px] px-1 py-0 rounded ${
+                      isActive ? 'bg-blue-500/30 text-blue-200' : 'bg-slate-800 text-slate-500'
+                    }`}
+                  >
+                    {sheetFrameCount}
+                  </span>
+
+                  {sheets.length > 1 && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onDeleteSheet?.(sheet.id);
+                      }}
+                      className="opacity-0 group-hover:opacity-100 hover:text-rose-400 text-slate-500 p-0.5 rounded transition-opacity"
+                      title="Delete Sheet"
+                    >
+                      <X size={11} />
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+
+            {/* + Add Sheet Button */}
+            <div className="relative">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsAddSheetMenuOpen(!isAddSheetMenuOpen);
+                }}
+                className="btn btn-secondary text-xs py-1 px-2.5 flex items-center gap-1 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10"
+                title="Add new Sprite Sheet (Upload or Presets)"
+              >
+                <Plus size={12} />
+                <span>Add Sheet</span>
+              </button>
+
+              {isAddSheetMenuOpen && (
+                <div
+                  className="absolute left-0 mt-1 w-56 bg-slate-900/95 border border-white/10 rounded-lg shadow-2xl py-1 z-50 text-xs backdrop-blur-md"
+                  onMouseLeave={() => setIsAddSheetMenuOpen(false)}
+                >
+                  <label className="dropdown-item cursor-pointer flex items-center gap-2">
+                    <Upload size={13} className="text-blue-400" />
+                    <span>Upload Image File...</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        if (e.target.files?.[0]) {
+                          onAddSheetFile?.(e.target.files[0]);
+                          setIsAddSheetMenuOpen(false);
+                          e.target.value = '';
+                        }
+                      }}
+                    />
+                  </label>
+                  <div className="h-px bg-white/10 my-1" />
+                  <div className="px-3 py-1 text-[10px] text-slate-500 font-bold uppercase tracking-wider">
+                    Quick Character Presets
+                  </div>
+                  <button
+                    onClick={() => { onAddSheetPreset?.('fox_idle'); setIsAddSheetMenuOpen(false); }}
+                    className="dropdown-item w-full text-left flex items-center justify-between"
+                  >
+                    <span>🦊 Fox Idle (128×128)</span>
+                    <span className="text-[9px] text-slate-500 font-mono">16f</span>
+                  </button>
+                  <button
+                    onClick={() => { onAddSheetPreset?.('fox_hurt'); setIsAddSheetMenuOpen(false); }}
+                    className="dropdown-item w-full text-left flex items-center justify-between"
+                  >
+                    <span>🦊 Fox Hurt (128×128)</span>
+                    <span className="text-[9px] text-slate-500 font-mono">16f</span>
+                  </button>
+                  <button
+                    onClick={() => { onAddSheetPreset?.('fox_run'); setIsAddSheetMenuOpen(false); }}
+                    className="dropdown-item w-full text-left flex items-center justify-between"
+                  >
+                    <span>🦊 Fox Run (192×128)</span>
+                    <span className="text-[9px] text-slate-500 font-mono">24f</span>
+                  </button>
+                  <button
+                    onClick={() => { onAddSheetPreset?.('fox_walk'); setIsAddSheetMenuOpen(false); }}
+                    className="dropdown-item w-full text-left flex items-center justify-between"
+                  >
+                    <span>🦊 Fox Walk (192×128)</span>
+                    <span className="text-[9px] text-slate-500 font-mono">24f</span>
+                  </button>
+                  <button
+                    onClick={() => { onAddSheetPreset?.('fox_death'); setIsAddSheetMenuOpen(false); }}
+                    className="dropdown-item w-full text-left flex items-center justify-between"
+                  >
+                    <span>🦊 Fox Death (192×128)</span>
+                    <span className="text-[9px] text-slate-500 font-mono">24f</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Interactive Canvas Viewport */}
+      <div
+        className="relative flex-1 overflow-hidden bg-checkerboard flex flex-col"
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={handleMouseUp}
+      >
+        {/* Canvas Viewport Controls Header Bar */}
+        {imageSrc && (
+          <div className="absolute top-3 left-3 right-3 z-20 flex items-center justify-between gap-2 pointer-events-none flex-wrap">
           {/* Left Action Buttons */}
           <div
             className="flex items-center gap-1.5 p-1.5 rounded-lg text-xs pointer-events-auto shadow-lg"
@@ -316,7 +501,7 @@ export function CanvasWorkspace({
               title="Toggle frame index numbers"
             >
               <Hash size={13} />
-              <span className="text-[11px] font-mono hidden sm:inline">#{frames.length}</span>
+              <span className="text-[11px] font-mono hidden sm:inline">#{visibleFrames.length}</span>
             </button>
 
             <button
@@ -427,7 +612,7 @@ export function CanvasWorkspace({
           />
 
           {/* Render Frame Boxes */}
-          {frames.map((frame, index) => {
+          {visibleFrames.map((frame, index) => {
             const isSelected = frame.id === selectedFrameId;
             const invScale = 1 / zoom;
 
@@ -605,6 +790,7 @@ export function CanvasWorkspace({
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 }

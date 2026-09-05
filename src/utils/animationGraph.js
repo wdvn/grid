@@ -112,8 +112,100 @@ export class CharacterStateMachine {
   }
 }
 
-// Generate default character state machine from sliced frames
-export function createDefaultCharacterGraph(frames = []) {
+// Generate default character state machine from sliced frames or animations
+export function createDefaultCharacterGraph(frames = [], animations = []) {
+  const frameMap = new Map(frames.map(f => [f.id, f]));
+  const resolveAnim = (pattern) => {
+    const found = animations.find(a => a.name.toLowerCase().includes(pattern.toLowerCase()));
+    return found ? found.frameIds.map(id => frameMap.get(id)).filter(Boolean) : null;
+  };
+
+  const idleDown = resolveAnim('idle_down') || resolveAnim('idle');
+  const idleUp = resolveAnim('idle_up') || idleDown;
+  const idleRight = resolveAnim('idle_right') || idleDown;
+  const idleLeft = resolveAnim('idle_left') || idleDown;
+
+  const runDown = resolveAnim('run_down') || resolveAnim('run');
+  const runUp = resolveAnim('run_up') || runDown;
+  const runRight = resolveAnim('run_right') || runDown;
+  const runLeft = resolveAnim('run_left') || runDown;
+
+  const actionClip = resolveAnim('action') || resolveAnim('hurt') || resolveAnim('attack') || resolveAnim('death');
+
+  // If animations match dedicated multi-sheet clips (Idle, Run, Action)
+  if (idleDown && runDown) {
+    return {
+      name: 'Character State Machine',
+      parameters: {
+        speed: 0.0,
+        moveX: 0.0,
+        moveY: -1.0,
+        isAttacking: false
+      },
+      defaultState: 'Idle',
+      anyStatePosition: { x: 50, y: 50 },
+      entryPosition: { x: 50, y: 170 },
+      states: {
+        Idle: {
+          id: 'Idle',
+          name: 'Idle',
+          type: 'BlendSpace2D',
+          position: { x: 260, y: 170 },
+          clips: {
+            down: idleDown,
+            up: idleUp,
+            right: idleRight,
+            left: idleLeft
+          }
+        },
+        Run: {
+          id: 'Run',
+          name: 'Run (4-Way Locomotion)',
+          type: 'BlendSpace2D',
+          position: { x: 550, y: 170 },
+          clips: {
+            down: runDown,
+            up: runUp,
+            right: runRight,
+            left: runLeft
+          }
+        },
+        Action: {
+          id: 'Action',
+          name: 'Action / Hurt',
+          type: 'OneShot',
+          duration: 0.45,
+          returnState: 'Idle',
+          position: { x: 400, y: 320 },
+          clip: actionClip || runRight.slice(0, 4)
+        }
+      },
+      transitions: [
+        {
+          id: 't_idle_to_run',
+          from: 'Idle',
+          to: 'Run',
+          name: 'Start Moving',
+          conditions: [{ param: 'speed', operator: '>', value: 0.1 }]
+        },
+        {
+          id: 't_run_to_idle',
+          from: 'Run',
+          to: 'Idle',
+          name: 'Stop Moving',
+          conditions: [{ param: 'speed', operator: '<=', value: 0.1 }]
+        },
+        {
+          id: 't_anystate_to_action',
+          from: 'AnyState',
+          to: 'Action',
+          name: 'Trigger Action',
+          conditions: [{ param: 'isAttacking', operator: '==', value: true }]
+        }
+      ]
+    };
+  }
+
   const rows = groupFramesByRows(frames);
 
   // If we have at least 4 rows (e.g. 4-way walk/run: Down, Up, Right, Left)
@@ -185,7 +277,7 @@ export function createDefaultCharacterGraph(frames = []) {
           conditions: [{ param: 'speed', operator: '<=', value: 0.1 }]
         },
         {
-          id: 't_any_to_action',
+          id: 't_anystate_to_action',
           from: 'AnyState',
           to: 'Action',
           name: 'Trigger Action',
