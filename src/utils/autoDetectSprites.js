@@ -89,12 +89,58 @@ export function autoDetectSprites(imageElement, alphaThreshold = 10, padding = 1
     }
   }
 
-  // Sort boxes from left-to-right, top-to-bottom logically by row
-  boxes.sort((a, b) => {
-    const rowDiff = Math.floor(a.y / 60) - Math.floor(b.y / 60);
-    if (rowDiff !== 0) return rowDiff;
-    return a.x - b.x;
+  // Group boxes into visual rows, sort rows top-to-bottom, and sort each row left-to-right
+  return groupBoxesByRow(boxes).flat();
+}
+
+// Group bounding boxes into rows based on vertical proximity and median height
+export function groupBoxesByRow(boxes = []) {
+  if (!boxes || boxes.length === 0) return [];
+  if (boxes.length === 1) return [[boxes[0]]];
+
+  const heights = boxes.map(b => b.h).sort((a, b) => a - b);
+  const medianH = heights[Math.floor(heights.length / 2)] || 32;
+
+  // Sort boxes primarily by vertical center
+  const sorted = [...boxes].sort((a, b) => {
+    const cyA = a.y + a.h / 2;
+    const cyB = b.y + b.h / 2;
+    return cyA - cyB;
   });
 
-  return boxes;
+  const rows = [];
+  const yTolerance = Math.max(6, medianH * 0.45);
+
+  for (const box of sorted) {
+    const boxCy = box.y + box.h / 2;
+    let matchedRow = null;
+
+    for (const row of rows) {
+      const rowAvgCy = row.reduce((sum, b) => sum + (b.y + b.h / 2), 0) / row.length;
+      if (Math.abs(boxCy - rowAvgCy) <= yTolerance) {
+        matchedRow = row;
+        break;
+      }
+    }
+
+    if (matchedRow) {
+      matchedRow.push(box);
+    } else {
+      rows.push([box]);
+    }
+  }
+
+  // Sort rows top-to-bottom by average Y
+  rows.sort((rA, rB) => {
+    const avgYA = rA.reduce((sum, b) => sum + b.y, 0) / rA.length;
+    const avgYB = rB.reduce((sum, b) => sum + b.y, 0) / rB.length;
+    return avgYA - avgYB;
+  });
+
+  // Sort each row left-to-right by X
+  rows.forEach(row => {
+    row.sort((a, b) => a.x - b.x);
+  });
+
+  return rows;
 }

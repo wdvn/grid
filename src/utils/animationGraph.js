@@ -1,4 +1,5 @@
 // Core Animation Graph & State Machine Engine for 2D Character Sprites
+import { groupFramesByRows } from './animationClips';
 
 export class CharacterStateMachine {
   constructor(config = {}) {
@@ -113,13 +114,14 @@ export class CharacterStateMachine {
 
 // Generate default character state machine from sliced frames
 export function createDefaultCharacterGraph(frames = []) {
-  // If we have 24 frames (like Fox_Run: 4 rows of 6 frames)
-  // Row 0: Down (0-5), Row 1: Up (6-11), Row 2: Right (12-17), Row 3: Left (18-23)
-  if (frames.length >= 24) {
-    const downRun = frames.slice(0, 6);
-    const upRun = frames.slice(6, 12);
-    const rightRun = frames.slice(12, 18);
-    const leftRun = frames.slice(18, 24);
+  const rows = groupFramesByRows(frames);
+
+  // If we have at least 4 rows (e.g. 4-way walk/run: Down, Up, Right, Left)
+  if (rows.length >= 4) {
+    const downRun = rows[0];
+    const upRun = rows[1];
+    const rightRun = rows[2];
+    const leftRun = rows[3];
 
     return {
       name: 'Fox Character Graph',

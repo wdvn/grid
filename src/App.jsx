@@ -10,7 +10,7 @@ import { ExportModal } from './components/ExportModal';
 import { createSampleSpriteSheet, createFoxSpritePreset } from './utils/sampleSprites';
 import { autoDetectSprites } from './utils/autoDetectSprites';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
-import { generateDefaultAnimations, createNewAnimation } from './utils/animationClips';
+import { generateDefaultAnimations, createNewAnimation, groupFramesByRows } from './utils/animationClips';
 
 export default function App() {
   // Sprite Sheet Image State
@@ -232,21 +232,39 @@ export default function App() {
     });
   };
 
-  // Auto detect non-transparent sprites
+  // Auto detect non-transparent sprites (always grouped strictly by rows)
   const handleAutoDetect = () => {
     if (!imageElement) return;
     const detected = autoDetectSprites(imageElement, 10, 1);
     if (detected.length > 0) {
-      const newFrames = detected.map((box, i) => ({
-        id: `auto_${Date.now()}_${i}`,
-        name: `sprite_${i + 1}`,
-        x: box.x,
-        y: box.y,
-        w: box.w,
-        h: box.h,
-        pivotX: 0.5,
-        pivotY: 0.5
-      }));
+      const rows = groupFramesByRows(detected);
+      const is4Way = rows.length === 4;
+      const dirLabels = ['down', 'up', 'right', 'left'];
+
+      const newFrames = [];
+      let globalIdx = 0;
+
+      rows.forEach((row, rowIdx) => {
+        row.forEach((box, colIdx) => {
+          globalIdx++;
+          const name = is4Way
+            ? `fox_run_${dirLabels[rowIdx]}_${colIdx + 1}`
+            : `sprite_r${rowIdx + 1}_${colIdx + 1}`;
+
+          newFrames.push({
+            id: `auto_${Date.now()}_${globalIdx}`,
+            name,
+            x: box.x,
+            y: box.y,
+            w: box.w,
+            h: box.h,
+            pivotX: 0.5,
+            pivotY: 0.85,
+            row: rowIdx
+          });
+        });
+      });
+
       setFrames(newFrames);
       setSelectedFrameId(newFrames[0]?.id || null);
       const anims = generateDefaultAnimations(newFrames);

@@ -10,110 +10,80 @@ export function createNewAnimation(name, frameIds = [], fps = 10, loop = true) {
   };
 }
 
+// Group frame objects into rows by their y & h positions
+export function groupFramesByRows(frames = []) {
+  if (!frames || frames.length === 0) return [];
+  if (frames.length === 1) return [[frames[0]]];
+
+  // Calculate median frame height for adaptive clustering
+  const heights = frames.map(f => f.h || 32).sort((a, b) => a - b);
+  const medianH = heights[Math.floor(heights.length / 2)] || 32;
+
+  // Sort primarily by vertical center
+  const sorted = [...frames].sort((a, b) => {
+    const cyA = (a.y ?? 0) + (a.h || medianH) / 2;
+    const cyB = (b.y ?? 0) + (b.h || medianH) / 2;
+    return cyA - cyB;
+  });
+
+  const rows = [];
+  const yTolerance = Math.max(6, medianH * 0.45);
+
+  for (const frame of sorted) {
+    const frameCy = (frame.y ?? 0) + (frame.h || medianH) / 2;
+    let matchedRow = null;
+
+    for (const row of rows) {
+      const rowAvgCy = row.reduce((sum, f) => sum + ((f.y ?? 0) + (f.h || medianH) / 2), 0) / row.length;
+      if (Math.abs(frameCy - rowAvgCy) <= yTolerance) {
+        matchedRow = row;
+        break;
+      }
+    }
+
+    if (matchedRow) {
+      matchedRow.push(frame);
+    } else {
+      rows.push([frame]);
+    }
+  }
+
+  // Sort rows top-to-bottom by average Y
+  rows.sort((rA, rB) => {
+    const avgYA = rA.reduce((sum, f) => sum + (f.y ?? 0), 0) / rA.length;
+    const avgYB = rB.reduce((sum, f) => sum + (f.y ?? 0), 0) / rB.length;
+    return avgYA - avgYB;
+  });
+
+  // Sort each row left-to-right by X
+  rows.forEach(row => {
+    row.sort((a, b) => (a.x ?? 0) - (b.x ?? 0));
+  });
+
+  return rows;
+}
+
 export function generateDefaultAnimations(frames = []) {
   if (!frames || frames.length === 0) {
     return [createNewAnimation('default', [], 10, true)];
   }
 
   const allFrameIds = frames.map(f => f.id);
+  const rows = groupFramesByRows(frames);
 
-  // 1. Fox Run / 24 frames preset (4 rows of 6: Down, Up, Right, Left)
-  if (frames.length === 24) {
-    return [
-      {
-        id: 'anim_run_down',
-        name: 'run_down',
-        fps: 10,
-        loop: true,
-        frameIds: frames.slice(0, 6).map(f => f.id)
-      },
-      {
-        id: 'anim_run_up',
-        name: 'run_up',
-        fps: 10,
-        loop: true,
-        frameIds: frames.slice(6, 12).map(f => f.id)
-      },
-      {
-        id: 'anim_run_right',
-        name: 'run_right',
-        fps: 10,
-        loop: true,
-        frameIds: frames.slice(12, 18).map(f => f.id)
-      },
-      {
-        id: 'anim_run_left',
-        name: 'run_left',
-        fps: 10,
-        loop: true,
-        frameIds: frames.slice(18, 24).map(f => f.id)
-      },
-      {
-        id: 'anim_default',
-        name: 'default',
-        fps: 10,
-        loop: true,
-        frameIds: allFrameIds
-      }
-    ];
-  }
+  // If there are exactly 4 rows (standard 4-directional locomotion pattern: Down, Up, Right, Left)
+  if (rows.length === 4) {
+    const dirNames = ['run_down', 'run_up', 'run_right', 'run_left'];
+    const dirIds = ['anim_run_down', 'anim_run_up', 'anim_run_right', 'anim_run_left'];
 
-  // 2. 16 frames preset (4 rows of 4: Idle Down, Up, Right, Left)
-  if (frames.length === 16) {
-    return [
-      {
-        id: 'anim_idle_down',
-        name: 'idle_down',
-        fps: 8,
-        loop: true,
-        frameIds: frames.slice(0, 4).map(f => f.id)
-      },
-      {
-        id: 'anim_idle_up',
-        name: 'idle_up',
-        fps: 8,
-        loop: true,
-        frameIds: frames.slice(4, 8).map(f => f.id)
-      },
-      {
-        id: 'anim_idle_right',
-        name: 'idle_right',
-        fps: 8,
-        loop: true,
-        frameIds: frames.slice(8, 12).map(f => f.id)
-      },
-      {
-        id: 'anim_idle_left',
-        name: 'idle_left',
-        fps: 8,
-        loop: true,
-        frameIds: frames.slice(12, 16).map(f => f.id)
-      },
-      {
-        id: 'anim_default',
-        name: 'default',
-        fps: 8,
-        loop: true,
-        frameIds: allFrameIds
-      }
-    ];
-  }
+    const result = rows.map((row, idx) => ({
+      id: dirIds[idx],
+      name: dirNames[idx],
+      fps: 10,
+      loop: true,
+      frameIds: row.map(f => f.id)
+    }));
 
-  // 3. Generic grid with multiple rows
-  if (frames.length > 6) {
-    const chunkSize = frames.length % 6 === 0 ? 6 : (frames.length % 4 === 0 ? 4 : 8);
-    const result = [];
-    for (let i = 0; i < frames.length; i += chunkSize) {
-      const rowNum = Math.floor(i / chunkSize) + 1;
-      const end = Math.min(i + chunkSize, frames.length);
-      result.push({
-        id: `anim_row_${rowNum}`,
-        name: `row_${rowNum}`,
-        fps: 10,
-        loop: true,
-        frameIds: frames.slice(i, end).map(f => f.id)
-      });
-    }
     result.push({
       id: 'anim_default',
       name: 'default',
@@ -121,19 +91,29 @@ export function generateDefaultAnimations(frames = []) {
       loop: true,
       frameIds: allFrameIds
     });
+
     return result;
   }
 
-  // Fallback single animation containing all frames
-  return [
-    {
-      id: 'anim_default',
-      name: 'default',
-      fps: 10,
-      loop: true,
-      frameIds: allFrameIds
-    }
-  ];
+  // Multi-row sprite sheets: always group strictly by physical rows
+  const result = rows.map((row, idx) => ({
+    id: `anim_row_${idx + 1}`,
+    name: `row_${idx + 1}`,
+    fps: 10,
+    loop: true,
+    frameIds: row.map(f => f.id)
+  }));
+
+  // Always include 'default' animation containing all frames
+  result.push({
+    id: 'anim_default',
+    name: 'default',
+    fps: 10,
+    loop: true,
+    frameIds: allFrameIds
+  });
+
+  return result;
 }
 
 // Resolve frame objects in order for a given animation
