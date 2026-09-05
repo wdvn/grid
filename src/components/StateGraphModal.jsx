@@ -202,8 +202,24 @@ export function StateGraphModal({
     }
   }, [getNodePos]);
 
+  // Refs to stabilize window event listeners without tearing down & re-adding on every frame
+  const panRef = useRef(pan);
+  panRef.current = pan;
+  const zoomRef = useRef(zoom);
+  zoomRef.current = zoom;
+  const findTargetNodeAtRef = useRef(findTargetNodeAt);
+  findTargetNodeAtRef.current = findTargetNodeAt;
+  const getNodePosRef = useRef(getNodePos);
+  getNodePosRef.current = getNodePos;
+  const connectStatesRef = useRef(connectStates);
+  connectStatesRef.current = connectStates;
+  const onUpdateGraphConfigRef = useRef(onUpdateGraphConfig);
+  onUpdateGraphConfigRef.current = onUpdateGraphConfig;
+  const showToastRef = useRef(showToast);
+  showToastRef.current = showToast;
+
   // ==========================================
-  // WINDOW EVENT LISTENERS FOR HIGH-PERF DRAG & PAN
+  // WINDOW EVENT LISTENERS FOR HIGH-PERF DRAG & PAN (Stable single binding)
   // ==========================================
   useEffect(() => {
     if (!isOpen) return;
@@ -223,12 +239,15 @@ export function StateGraphModal({
         return;
       }
 
+      const curPan = panRef.current;
+      const curZoom = zoomRef.current;
+
       // 2. Dragging a State Node (Local state only, no parent re-renders during drag!)
       if (draggingNodeIdRef.current && canvasAreaRef.current) {
         hasMovedNodeRef.current = true;
         const rect = canvasAreaRef.current.getBoundingClientRect();
-        const mouseX = (e.clientX - rect.left - pan.x) / zoom;
-        const mouseY = (e.clientY - rect.top - pan.y) / zoom;
+        const mouseX = (e.clientX - rect.left - curPan.x) / curZoom;
+        const mouseY = (e.clientY - rect.top - curPan.y) / curZoom;
 
         const newX = Math.round(mouseX - dragOffsetRef.current.x);
         const newY = Math.round(mouseY - dragOffsetRef.current.y);
@@ -269,11 +288,11 @@ export function StateGraphModal({
       // 3. Dragging a Transition Connection Line
       if (transitionDragRef.current && canvasAreaRef.current) {
         const rect = canvasAreaRef.current.getBoundingClientRect();
-        const mouseCanvasX = (e.clientX - rect.left - pan.x) / zoom;
-        const mouseCanvasY = (e.clientY - rect.top - pan.y) / zoom;
+        const mouseCanvasX = (e.clientX - rect.left - curPan.x) / curZoom;
+        const mouseCanvasY = (e.clientY - rect.top - curPan.y) / curZoom;
 
         // Detect target node
-        const targetId = findTargetNodeAt(e.clientX, e.clientY);
+        const targetId = findTargetNodeAtRef.current(e.clientX, e.clientY);
         const fromId = transitionDragRef.current.fromId;
         const isValidTarget = targetId && targetId !== fromId && targetId !== 'Entry' && targetId !== 'AnyState';
 
@@ -284,7 +303,7 @@ export function StateGraphModal({
           // If hovering over a valid target node, snap to target's input edge
           let finalPos = { x: mouseCanvasX, y: mouseCanvasY };
           if (isValidTarget) {
-            const targetPos = getNodePos(targetId);
+            const targetPos = getNodePosRef.current(targetId);
             finalPos = { x: targetPos.x, y: targetPos.y + 38 };
           }
 
@@ -306,8 +325,8 @@ export function StateGraphModal({
         setDraggingNodeId(null);
         if (hasMovedNodeRef.current) {
           hasMovedNodeRef.current = false;
-          if (onUpdateGraphConfig && pendingGraphRef.current) {
-            onUpdateGraphConfig(pendingGraphRef.current);
+          if (onUpdateGraphConfigRef.current && pendingGraphRef.current) {
+            onUpdateGraphConfigRef.current(pendingGraphRef.current);
           }
         }
       }
@@ -323,15 +342,15 @@ export function StateGraphModal({
 
         // If mouse was dragged (> 6px or held for > 200ms)
         if (moveDist > 6 || elapsed > 200) {
-          const targetId = hoveredTargetNodeIdRef.current || findTargetNodeAt(e.clientX, e.clientY);
+          const targetId = hoveredTargetNodeIdRef.current || findTargetNodeAtRef.current(e.clientX, e.clientY);
           if (targetId && targetId !== curDrag.fromId && targetId !== 'Entry' && targetId !== 'AnyState') {
-            connectStates(curDrag.fromId, targetId);
+            connectStatesRef.current(curDrag.fromId, targetId);
           }
           setTransitionDrag(null);
           setHoveredTargetNodeId(null);
         } else {
           // Quick click on '+' handle keeps connection mode active for Click-to-Connect!
-          showToast(`Click any target state to connect from ${curDrag.fromId}`);
+          showToastRef.current(`Click any target state to connect from ${curDrag.fromId}`);
         }
       }
     };
@@ -344,7 +363,7 @@ export function StateGraphModal({
       window.removeEventListener('mousemove', handleWindowMouseMove);
       window.removeEventListener('mouseup', handleWindowMouseUp);
     };
-  }, [isOpen, zoom, pan.x, pan.y, findTargetNodeAt, getNodePos, connectStates, onUpdateGraphConfig, showToast]);
+  }, [isOpen]);
 
   // Cancel connection on Escape key
   useEffect(() => {
@@ -650,13 +669,14 @@ export function StateGraphModal({
             {/* Scaled & Panned Canvas Layer */}
             <div
               style={{
-                transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+                transform: `translate3d(${pan.x}px, ${pan.y}px, 0) scale(${zoom})`,
                 transformOrigin: '0 0',
                 position: 'absolute',
                 inset: 0,
                 width: '3000px',
                 height: '3000px',
-                pointerEvents: 'none'
+                pointerEvents: 'none',
+                willChange: isPanning ? 'transform' : 'auto'
               }}
             >
               {/* SVG TRANSITION ARROWS LAYER */}
@@ -834,11 +854,13 @@ export function StateGraphModal({
                 data-state-node-id="Entry"
                 onMouseDown={(e) => handleNodeMouseDown(e, 'Entry')}
                 style={{
-                  transform: `translate(${entryPos.x}px, ${entryPos.y}px)`,
+                  transform: `translate3d(${entryPos.x}px, ${entryPos.y}px, 0)`,
                   width: '130px',
-                  pointerEvents: 'auto'
+                  pointerEvents: 'auto',
+                  willChange: draggingNodeId === 'Entry' ? 'transform' : 'auto',
+                  transition: draggingNodeId === 'Entry' ? 'none' : undefined
                 }}
-                className="absolute rounded-lg border border-emerald-500/60 bg-emerald-950/80 shadow-lg p-2 flex items-center justify-between cursor-move hover:border-emerald-400 transition-colors select-none"
+                className="absolute rounded-lg border border-emerald-500/60 bg-emerald-950/80 shadow-lg p-2 flex items-center justify-between cursor-move hover:border-emerald-400 transition-[border-color,background-color] duration-150 select-none"
               >
                 <div className="flex items-center gap-1.5">
                   <div className="w-3 h-3 rounded-full bg-emerald-500 animate-pulse" />
@@ -852,11 +874,13 @@ export function StateGraphModal({
                 data-state-node-id="AnyState"
                 onMouseDown={(e) => handleNodeMouseDown(e, 'AnyState')}
                 style={{
-                  transform: `translate(${anyStatePos.x}px, ${anyStatePos.y}px)`,
+                  transform: `translate3d(${anyStatePos.x}px, ${anyStatePos.y}px, 0)`,
                   width: '170px',
-                  pointerEvents: 'auto'
+                  pointerEvents: 'auto',
+                  willChange: draggingNodeId === 'AnyState' ? 'transform' : 'auto',
+                  transition: draggingNodeId === 'AnyState' ? 'none' : undefined
                 }}
-                className={`absolute rounded-lg border shadow-xl p-2.5 cursor-move transition-all select-none ${
+                className={`absolute rounded-lg border shadow-xl p-2.5 cursor-move transition-[border-color,background-color,box-shadow] duration-150 select-none ${
                   selectedItem?.type === 'state' && selectedItem.id === 'AnyState'
                     ? 'border-cyan-400 ring-2 ring-cyan-400/50 bg-cyan-950/90'
                     : 'border-cyan-500/50 bg-cyan-950/75 hover:border-cyan-400'
@@ -902,11 +926,13 @@ export function StateGraphModal({
                     data-state-node-id={id}
                     onMouseDown={(e) => handleNodeMouseDown(e, id)}
                     style={{
-                      transform: `translate(${pos.x}px, ${pos.y}px)`,
+                      transform: `translate3d(${pos.x}px, ${pos.y}px, 0)`,
                       width: '200px',
-                      pointerEvents: 'auto'
+                      pointerEvents: 'auto',
+                      willChange: draggingNodeId === id ? 'transform' : 'auto',
+                      transition: draggingNodeId === id ? 'none' : undefined
                     }}
-                    className={`absolute rounded-xl border shadow-xl transition-all cursor-move select-none ${
+                    className={`absolute rounded-xl border shadow-xl transition-[border-color,background-color,box-shadow] duration-150 cursor-move select-none ${
                       isTargetHovered
                         ? 'border-amber-400 ring-4 ring-amber-400/60 bg-amber-950/80 shadow-[0_0_25px_rgba(245,158,11,0.5)] scale-[1.02] z-20'
                         : isSourceNode

@@ -1,5 +1,5 @@
 // Core Animation Graph & State Machine Engine for 2D Character Sprites
-import { groupFramesByRows } from './animationClips';
+import { groupFramesByRows } from './animationClips.js';
 
 export class CharacterStateMachine {
   constructor(config = {}, animations = [], frames = []) {
@@ -19,6 +19,24 @@ export class CharacterStateMachine {
     this.animations = animations || [];
     this.frames = frames || [];
     this.frameMap = new Map(this.frames.map(f => [f.id, f]));
+    this.idleGraceTimer = 0;
+    this._rebuildCache();
+  }
+
+  // Pre-cache resolved frame arrays and metadata per animation for O(1) lookup during 60 FPS tick loop
+  _rebuildCache() {
+    this._resolvedAnimMap = new Map();
+    for (const anim of this.animations) {
+      if (Array.isArray(anim.frameIds)) {
+        const resolved = anim.frameIds.map(id => this.frameMap.get(id)).filter(Boolean);
+        this._resolvedAnimMap.set(anim.id, {
+          anim,
+          frames: resolved,
+          fps: anim.fps || 10,
+          loop: anim.loop !== undefined ? anim.loop : true
+        });
+      }
+    }
   }
 
   // Update live animations and frames context to guarantee dynamic frame updates reflect immediately
@@ -26,19 +44,25 @@ export class CharacterStateMachine {
     this.animations = animations || [];
     this.frames = frames || [];
     this.frameMap = new Map(this.frames.map(f => [f.id, f]));
+    this.idleGraceTimer = 0;
+    this._rebuildCache();
   }
 
   // Update parameters from input (e.g. keyboard / joystick)
   setParameters(params) {
     this.parameters = { ...this.parameters, ...params };
 
-    // Update facing direction if movement is non-zero
-    const { moveX, moveY, speed } = this.parameters;
-    if (speed > 0.05 || Math.abs(moveX) > 0.1 || Math.abs(moveY) > 0.1) {
-      if (Math.abs(moveX) > Math.abs(moveY)) {
-        this.lastDirection = moveX > 0 ? 'right' : 'left';
-      } else {
-        this.lastDirection = moveY > 0 ? 'up' : 'down';
+    // Support explicit facing direction from directional key stack (most recent key has priority)
+    if (params.facingDirection) {
+      this.lastDirection = params.facingDirection;
+    } else {
+      const { moveX, moveY, speed } = this.parameters;
+      if (speed > 0.05 || Math.abs(moveX) > 0.1 || Math.abs(moveY) > 0.1) {
+        if (Math.abs(moveX) > Math.abs(moveY)) {
+          this.lastDirection = moveX > 0 ? 'right' : 'left';
+        } else {
+          this.lastDirection = moveY > 0 ? 'up' : 'down';
+        }
       }
     }
   }
@@ -50,13 +74,31 @@ export class CharacterStateMachine {
     // Check transitions from current state or "AnyState"
     for (const transition of this.transitions) {
       if (transition.from === this.currentStateId || transition.from === 'AnyState') {
+        // Run -> Idle transition: provide a 100ms grace period so switching
+        // between WASD directions doesn't cause a momentary drop/hitch into Idle
+        const isRunToIdle = transition.id === 't_run_to_idle' || (transition.from === 'Run' && transition.to === 'Idle');
+        if (isRunToIdle) {
+          if (this.parameters.speed <= 0.1) {
+            this.idleGraceTimer = (this.idleGraceTimer || 0) + deltaSeconds;
+            if (this.idleGraceTimer < 0.10) {
+              continue; // Stay in Run during grace period while switching keys
+            }
+          } else {
+            this.idleGraceTimer = 0;
+            continue;
+          }
+        }
+
         if (this.evaluateConditions(transition.conditions)) {
           // If transitioning out of action state, reset attack trigger
           if (this.currentStateId === 'Action' && transition.to !== 'Action') {
             this.parameters.isAttacking = false;
           }
-          this.currentStateId = transition.to;
-          this.stateTimer = 0;
+          if (this.currentStateId !== transition.to) {
+            this.currentStateId = transition.to;
+            this.stateTimer = 0;
+            this.idleGraceTimer = 0;
+          }
           break;
         }
       }
@@ -68,6 +110,7 @@ export class CharacterStateMachine {
       this.parameters.isAttacking = false;
       this.currentStateId = currentState.returnState || 'Idle';
       this.stateTimer = 0;
+      this.idleGraceTimer = 0;
     }
 
     return this.getCurrentClip();
@@ -98,18 +141,19 @@ export class CharacterStateMachine {
     const dir = this.lastDirection || 'down';
 
     if (state.type === 'BlendSpace2D') {
-      // 1. Try resolving dynamically from clipIds if animations exist
-      if (state.clipIds && state.clipIds[dir] && this.animations.length > 0) {
-        const anim = this.animations.find(a => a.id === state.clipIds[dir]);
-        if (anim && Array.isArray(anim.frameIds) && anim.frameIds.length > 0) {
-          const resolved = anim.frameIds.map(id => this.frameMap.get(id)).filter(Boolean);
-          if (resolved.length > 0) {
-            return {
-              stateId: this.currentStateId,
-              direction: dir,
-              clip: resolved
-            };
-          }
+      // 1. Try resolving dynamically from cached clipIds
+      const clipId = state.clipIds?.[dir];
+      if (clipId) {
+        const cached = this._resolvedAnimMap.get(clipId);
+        if (cached && cached.frames.length > 0) {
+          return {
+            stateId: this.currentStateId,
+            direction: dir,
+            clip: cached.frames,
+            fps: cached.fps,
+            loop: cached.loop,
+            animId: clipId
+          };
         }
       }
 
@@ -119,37 +163,43 @@ export class CharacterStateMachine {
       return {
         stateId: this.currentStateId,
         direction: dir,
-        clip: clip || null
+        clip: clip || null,
+        fps: state.fps || 10,
+        loop: true
       };
     }
 
     if (state.type === 'OneShot') {
-      // 1. Try resolving dynamically from clipId
-      if (state.clipId && this.animations.length > 0) {
-        const anim = this.animations.find(a => a.id === state.clipId);
-        if (anim && Array.isArray(anim.frameIds) && anim.frameIds.length > 0) {
-          const resolved = anim.frameIds.map(id => this.frameMap.get(id)).filter(Boolean);
-          if (resolved.length > 0) {
-            return {
-              stateId: this.currentStateId,
-              direction: dir,
-              clip: resolved
-            };
-          }
+      // 1. Try resolving dynamically from cached clipId
+      if (state.clipId) {
+        const cached = this._resolvedAnimMap.get(state.clipId);
+        if (cached && cached.frames.length > 0) {
+          return {
+            stateId: this.currentStateId,
+            direction: dir,
+            clip: cached.frames,
+            fps: cached.fps,
+            loop: cached.loop,
+            animId: state.clipId
+          };
         }
       }
 
       return {
         stateId: this.currentStateId,
         direction: dir,
-        clip: state.clip || null
+        clip: state.clip || null,
+        fps: state.fps || 10,
+        loop: false
       };
     }
 
     return {
       stateId: this.currentStateId,
       direction: dir,
-      clip: state.clip || null
+      clip: state.clip || null,
+      fps: state.fps || 10,
+      loop: true
     };
   }
 }

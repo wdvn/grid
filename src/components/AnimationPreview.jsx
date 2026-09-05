@@ -116,7 +116,6 @@ export function AnimationPreview({
   const containerRef = useRef(null);
   const [arenaSize, setArenaSize] = useState({ w: 340, h: 280 });
   const arenaSizeRef = useRef({ w: 340, h: 280 });
-  arenaSizeRef.current = arenaSize;
 
   // Real-time character physics & animation state stored in refs to eliminate 60 FPS React re-renders
   const charPosRef = useRef({ x: 170, y: 140 });
@@ -132,6 +131,7 @@ export function AnimationPreview({
         if (width > 20 && height > 20) {
           const w = Math.round(width);
           const h = Math.round(height);
+          arenaSizeRef.current = { w, h };
           setArenaSize((prev) => (prev.w === w && prev.h === h ? prev : { w, h }));
         }
       }
@@ -170,13 +170,23 @@ export function AnimationPreview({
 
   // Real-time keyboard input tracking (WASD + Arrows + Space)
   const keysDownRef = useRef(new Set());
-  const [activeKeys, setActiveKeys] = useState({
-    up: false,
-    down: false,
-    left: false,
-    right: false,
-    action: false
-  });
+  const dirStackRef = useRef([]); // Direction history stack: latest pressed direction has immediate priority
+  const btnUpRef = useRef(null);
+  const btnDownRef = useRef(null);
+  const btnLeftRef = useRef(null);
+  const btnRightRef = useRef(null);
+  const btnActionRef = useRef(null);
+
+  // Directly update virtual button classes without triggering 60 FPS React re-renders
+  const updateKeyVisuals = useCallback((up, down, left, right, action) => {
+    btnUpRef.current?.classList.toggle('active', !!up);
+    btnDownRef.current?.classList.toggle('active', !!down);
+    btnLeftRef.current?.classList.toggle('active', !!left);
+    btnRightRef.current?.classList.toggle('active', !!right);
+    if (action !== undefined) {
+      btnActionRef.current?.classList.toggle('active', !!action);
+    }
+  }, []);
 
   const updateParametersFromKeys = useCallback(() => {
     if (!stateMachineRef.current) return;
@@ -195,31 +205,31 @@ export function AnimationPreview({
     if (isRight) mx += 1;
     if (isLeft) mx -= 1;
 
+    // Filter stack to only active keys and maintain insertion order
+    const stack = dirStackRef.current.filter((d) =>
+      (d === 'up' && isUp) ||
+      (d === 'down' && isDown) ||
+      (d === 'left' && isLeft) ||
+      (d === 'right' && isRight)
+    );
+    if (isUp && !stack.includes('up')) stack.push('up');
+    if (isDown && !stack.includes('down')) stack.push('down');
+    if (isLeft && !stack.includes('left')) stack.push('left');
+    if (isRight && !stack.includes('right')) stack.push('right');
+    dirStackRef.current = stack;
+
+    const latestDir = stack.length > 0 ? stack[stack.length - 1] : null;
     const speed = (mx !== 0 || my !== 0) ? 1.0 : 0.0;
+
     stateMachineRef.current.setParameters({
       speed,
       moveX: mx,
-      moveY: my
+      moveY: my,
+      ...(latestDir ? { facingDirection: latestDir } : {})
     });
 
-    setActiveKeys((prev) => {
-      if (
-        prev.up === isUp &&
-        prev.down === isDown &&
-        prev.left === isLeft &&
-        prev.right === isRight
-      ) {
-        return prev;
-      }
-      return {
-        ...prev,
-        up: isUp,
-        down: isDown,
-        left: isLeft,
-        right: isRight
-      };
-    });
-  }, []);
+    updateKeyVisuals(isUp, isDown, isLeft, isRight);
+  }, [updateKeyVisuals]);
 
   // Virtual buttons input helpers (for mouse click & mobile touch)
   const triggerVirtualKey = useCallback((code, isDown) => {
@@ -227,14 +237,24 @@ export function AnimationPreview({
       if (isDown && stateMachineRef.current) {
         stateMachineRef.current.setParameters({ isAttacking: true });
       }
-      setActiveKeys((prev) => (prev.action === isDown ? prev : { ...prev, action: isDown }));
+      btnActionRef.current?.classList.toggle('active', isDown);
       return;
     }
 
+    const dirMap = { KeyW: 'up', KeyS: 'down', KeyA: 'left', KeyD: 'right' };
+    const dir = dirMap[code];
+
     if (isDown) {
       keysDownRef.current.add(code);
+      if (dir) {
+        dirStackRef.current = dirStackRef.current.filter(d => d !== dir);
+        dirStackRef.current.push(dir);
+      }
     } else {
       keysDownRef.current.delete(code);
+      if (dir) {
+        dirStackRef.current = dirStackRef.current.filter(d => d !== dir);
+      }
     }
     updateParametersFromKeys();
   }, [updateParametersFromKeys]);
@@ -258,8 +278,17 @@ export function AnimationPreview({
           if (stateMachineRef.current) {
             stateMachineRef.current.setParameters({ isAttacking: true });
           }
-          setActiveKeys((prev) => (prev.action ? prev : { ...prev, action: true }));
+          btnActionRef.current?.classList.toggle('active', true);
           return;
+        }
+
+        const dir = (e.code === 'KeyW' || e.code === 'ArrowUp') ? 'up'
+                  : (e.code === 'KeyS' || e.code === 'ArrowDown') ? 'down'
+                  : (e.code === 'KeyA' || e.code === 'ArrowLeft') ? 'left'
+                  : (e.code === 'KeyD' || e.code === 'ArrowRight') ? 'right' : null;
+        if (dir) {
+          dirStackRef.current = dirStackRef.current.filter(d => d !== dir);
+          dirStackRef.current.push(dir);
         }
 
         keysDownRef.current.add(e.code);
@@ -271,8 +300,16 @@ export function AnimationPreview({
       if (previewMode !== 'character') return;
 
       if (e.code === 'Space') {
-        setActiveKeys((prev) => (!prev.action ? prev : { ...prev, action: false }));
+        btnActionRef.current?.classList.toggle('active', false);
         return;
+      }
+
+      const dir = (e.code === 'KeyW' || e.code === 'ArrowUp') ? 'up'
+                : (e.code === 'KeyS' || e.code === 'ArrowDown') ? 'down'
+                : (e.code === 'KeyA' || e.code === 'ArrowLeft') ? 'left'
+                : (e.code === 'KeyD' || e.code === 'ArrowRight') ? 'right' : null;
+      if (dir) {
+        dirStackRef.current = dirStackRef.current.filter(d => d !== dir);
       }
 
       if (keysDownRef.current.has(e.code)) {
@@ -283,8 +320,9 @@ export function AnimationPreview({
 
     const handleBlur = () => {
       keysDownRef.current.clear();
+      dirStackRef.current = [];
       updateParametersFromKeys();
-      setActiveKeys({ up: false, down: false, left: false, right: false, action: false });
+      updateKeyVisuals(false, false, false, false, false);
     };
 
     window.addEventListener('keydown', handleKeyDown);
@@ -296,61 +334,35 @@ export function AnimationPreview({
       window.removeEventListener('keyup', handleKeyUp);
       window.removeEventListener('blur', handleBlur);
     };
-  }, [previewMode, updateParametersFromKeys]);
+  }, [previewMode, updateParametersFromKeys, updateKeyVisuals]);
 
   // Reset keys on mode switch
   useEffect(() => {
     if (previewMode !== 'character') {
       keysDownRef.current.clear();
-      setActiveKeys({ up: false, down: false, left: false, right: false, action: false });
+      dirStackRef.current = [];
+      updateKeyVisuals(false, false, false, false, false);
     }
-  }, [previewMode]);
+  }, [previewMode, updateKeyVisuals]);
+
+  // Track last direction to detect directional animation change inside a state
+  const lastResolvedDirRef = useRef('down');
 
   // Direct Character Canvas Drawing Helper (Draws razor-sharp pixelated character in arena)
-  const drawCharacterCanvas = useCallback((ctx, canvas) => {
+  const drawCharacterCanvas = useCallback((ctx, canvas, activeFrame) => {
     if (!imageElement || frames.length === 0) return;
 
     const curArena = arenaSizeRef.current;
-    if (canvas.width !== curArena.w) canvas.width = curArena.w;
-    if (canvas.height !== curArena.h) canvas.height = curArena.h;
-
-    ctx.imageSmoothingEnabled = false;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    // Draw Arena Subtle Checker Tile Floor
-    const tileSize = 24;
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.02)';
-    for (let r = 0; r < Math.ceil(curArena.h / tileSize); r++) {
-      for (let c = 0; c < Math.ceil(curArena.w / tileSize); c++) {
-        if ((r + c) % 2 === 0) {
-          ctx.fillRect(c * tileSize, r * tileSize, tileSize, tileSize);
-        }
-      }
+    if (canvas.width !== curArena.w) {
+      canvas.width = curArena.w;
     }
+    if (canvas.height !== curArena.h) {
+      canvas.height = curArena.h;
+    }
+    ctx.imageSmoothingEnabled = false;
 
-    // Draw Arena Subtle Boundary Ring
-    ctx.strokeStyle = 'rgba(59, 130, 246, 0.15)';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(6, 6, curArena.w - 12, curArena.h - 12);
-
-    // Draw Corner Accent Brackets
-    ctx.strokeStyle = 'rgba(59, 130, 246, 0.4)';
-    ctx.lineWidth = 2;
-    const bLen = 10;
-    // Top-Left
-    ctx.beginPath(); ctx.moveTo(6, 6 + bLen); ctx.lineTo(6, 6); ctx.lineTo(6 + bLen, 6); ctx.stroke();
-    // Top-Right
-    ctx.beginPath(); ctx.moveTo(curArena.w - 6 - bLen, 6); ctx.lineTo(curArena.w - 6, 6); ctx.lineTo(curArena.w - 6, 6 + bLen); ctx.stroke();
-    // Bottom-Left
-    ctx.beginPath(); ctx.moveTo(6, curArena.h - 6 - bLen); ctx.lineTo(6, curArena.h - 6); ctx.lineTo(6 + bLen, curArena.h - 6); ctx.stroke();
-    // Bottom-Right
-    ctx.beginPath(); ctx.moveTo(curArena.w - 6 - bLen, curArena.h - 6); ctx.lineTo(curArena.w - 6, curArena.h - 6); ctx.lineTo(curArena.w - 6, curArena.h - 6 - bLen); ctx.stroke();
-
-    // Resolve active clip frame from character state machine
-    const clipObj = stateMachineRef.current?.getCurrentClip();
-    const clipFrames = clipObj?.clip || [];
-    const safeIndex = clipFrames.length > 0 ? (charFrameIdxRef.current % clipFrames.length) : 0;
-    const activeFrame = clipFrames[safeIndex] || frames[0];
+    // ALWAYS clean clear the entire canvas on every frame to guarantee ZERO ghosting or leftover smear
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     if (activeFrame && activeFrame.w > 0 && activeFrame.h > 0) {
       const drawW = activeFrame.w * zoomScale;
@@ -365,24 +377,7 @@ export function AnimationPreview({
         drawY = Math.round(charPosRef.current.y - drawH / 2);
       }
 
-      // Draw clean drop shadow under character's feet
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
-      ctx.beginPath();
-      const shadowW = Math.max(10, drawW * 0.35);
-      const shadowH = Math.max(4, drawW * 0.12);
-      const feetY = drawY + drawH - Math.max(2, Math.round(zoomScale * 0.8));
-      ctx.ellipse(
-        drawX + drawW / 2,
-        feetY,
-        shadowW,
-        shadowH,
-        0,
-        0,
-        Math.PI * 2
-      );
-      ctx.fill();
-
-      // Draw Sprite with 0% distortion and razor-sharp pixels
+      // Draw Sprite with 100% crisp pixel rendering and no ghost artifacts
       const frameImg = (activeFrame?.sheetId && sheetMap?.get(activeFrame.sheetId)?.imageElement) || imageElement;
       ctx.globalAlpha = 1.0;
       ctx.drawImage(
@@ -410,6 +405,8 @@ export function AnimationPreview({
       const dt = Math.min((now - lastTime) / 1000, 0.05);
       lastTime = now;
 
+      let currentActiveFrame = frames[0] || null;
+
       if (isPlaying && stateMachineRef.current) {
         const resolved = stateMachineRef.current.update(dt);
         const newStateId = stateMachineRef.current.currentStateId;
@@ -423,6 +420,15 @@ export function AnimationPreview({
         }
 
         const currentClip = resolved?.clip || [];
+        const currentDir = resolved?.direction || 'down';
+
+        // When direction switches inside a state (WASD BlendSpace2D transform), clamp frame index cleanly
+        if (lastResolvedDirRef.current !== currentDir) {
+          lastResolvedDirRef.current = currentDir;
+          if (currentClip.length > 0) {
+            charFrameIdxRef.current = charFrameIdxRef.current % currentClip.length;
+          }
+        }
 
         // Move character in arena if speed > 0 and not stationary
         const params = stateMachineRef.current.parameters;
@@ -438,9 +444,9 @@ export function AnimationPreview({
 
           const moveSpeed = 130 * dt; // Pixels per second
           const curArena = arenaSizeRef.current;
-          const activeFrame = currentClip[charFrameIdxRef.current] || frames[0];
-          const halfW = activeFrame ? (activeFrame.w * zoomScale) / 2 : 24;
-          const halfH = activeFrame ? (activeFrame.h * zoomScale) / 2 : 24;
+          const frameForBounds = (currentClip.length > 0 ? currentClip[charFrameIdxRef.current % currentClip.length] : null) || frames[0];
+          const halfW = frameForBounds ? (frameForBounds.w * zoomScale) / 2 : 24;
+          const halfH = frameForBounds ? (frameForBounds.h * zoomScale) / 2 : 24;
           const pad = 10;
 
           let nx = charPosRef.current.x + mx * moveSpeed;
@@ -454,15 +460,23 @@ export function AnimationPreview({
           charPosRef.current.y = ny;
         }
 
-        // Cycle animation frames smoothly without accumulator loss
+        // Cycle animation frames smoothly using clip's true FPS
+        const targetFps = resolved?.fps || fps;
         if (currentClip.length > 1) {
-          frameAccRef.current += dt;
-          const frameDuration = 1 / Math.max(1, fps);
-          if (frameAccRef.current >= frameDuration) {
-            const advance = Math.floor(frameAccRef.current / frameDuration);
-            frameAccRef.current -= advance * frameDuration;
-            charFrameIdxRef.current = (charFrameIdxRef.current + advance) % currentClip.length;
+          if (params.speed > 0) {
+            frameAccRef.current += dt;
+            const frameDuration = 1 / Math.max(1, targetFps);
+            if (frameAccRef.current >= frameDuration) {
+              const advance = Math.floor(frameAccRef.current / frameDuration);
+              frameAccRef.current -= advance * frameDuration;
+              charFrameIdxRef.current = (charFrameIdxRef.current + advance) % currentClip.length;
+            }
           }
+          currentActiveFrame = currentClip[charFrameIdxRef.current] || currentClip[0];
+        } else if (currentClip.length === 1) {
+          charFrameIdxRef.current = 0;
+          frameAccRef.current = 0;
+          currentActiveFrame = currentClip[0];
         } else {
           charFrameIdxRef.current = 0;
           frameAccRef.current = 0;
@@ -473,7 +487,7 @@ export function AnimationPreview({
       if (canvasRef.current) {
         const ctx = canvasRef.current.getContext('2d');
         if (ctx) {
-          drawCharacterCanvas(ctx, canvasRef.current);
+          drawCharacterCanvas(ctx, canvasRef.current, currentActiveFrame);
         }
       }
 
@@ -765,12 +779,13 @@ export function AnimationPreview({
               <div className="grid grid-cols-3 gap-1 w-24">
                 <div />
                 <button
+                  ref={btnUpRef}
                   onMouseDown={() => triggerVirtualKey('KeyW', true)}
                   onMouseUp={() => triggerVirtualKey('KeyW', false)}
                   onMouseLeave={() => triggerVirtualKey('KeyW', false)}
                   onTouchStart={(e) => { e.preventDefault(); triggerVirtualKey('KeyW', true); }}
                   onTouchEnd={(e) => { e.preventDefault(); triggerVirtualKey('KeyW', false); }}
-                  className={`dpad-btn ${activeKeys.up ? 'active' : ''}`}
+                  className="dpad-btn"
                   title="Move Up (W / ↑)"
                 >
                   <ChevronUp size={15} />
@@ -778,36 +793,39 @@ export function AnimationPreview({
                 <div />
 
                 <button
+                  ref={btnLeftRef}
                   onMouseDown={() => triggerVirtualKey('KeyA', true)}
                   onMouseUp={() => triggerVirtualKey('KeyA', false)}
                   onMouseLeave={() => triggerVirtualKey('KeyA', false)}
                   onTouchStart={(e) => { e.preventDefault(); triggerVirtualKey('KeyA', true); }}
                   onTouchEnd={(e) => { e.preventDefault(); triggerVirtualKey('KeyA', false); }}
-                  className={`dpad-btn ${activeKeys.left ? 'active' : ''}`}
+                  className="dpad-btn"
                   title="Move Left (A / ←)"
                 >
                   <ChevronLeft size={15} />
                 </button>
 
                 <button
+                  ref={btnDownRef}
                   onMouseDown={() => triggerVirtualKey('KeyS', true)}
                   onMouseUp={() => triggerVirtualKey('KeyS', false)}
                   onMouseLeave={() => triggerVirtualKey('KeyS', false)}
                   onTouchStart={(e) => { e.preventDefault(); triggerVirtualKey('KeyS', true); }}
                   onTouchEnd={(e) => { e.preventDefault(); triggerVirtualKey('KeyS', false); }}
-                  className={`dpad-btn ${activeKeys.down ? 'active' : ''}`}
+                  className="dpad-btn"
                   title="Move Down (S / ↓)"
                 >
                   <ChevronDown size={15} />
                 </button>
 
                 <button
+                  ref={btnRightRef}
                   onMouseDown={() => triggerVirtualKey('KeyD', true)}
                   onMouseUp={() => triggerVirtualKey('KeyD', false)}
                   onMouseLeave={() => triggerVirtualKey('KeyD', false)}
                   onTouchStart={(e) => { e.preventDefault(); triggerVirtualKey('KeyD', true); }}
                   onTouchEnd={(e) => { e.preventDefault(); triggerVirtualKey('KeyD', false); }}
-                  className={`dpad-btn ${activeKeys.right ? 'active' : ''}`}
+                  className="dpad-btn"
                   title="Move Right (D / →)"
                 >
                   <ChevronRight size={15} />
@@ -818,6 +836,7 @@ export function AnimationPreview({
             {/* Virtual Action Button & Play Pause */}
             <div className="flex items-center gap-1.5">
               <button
+                ref={btnActionRef}
                 onMouseDown={() => triggerVirtualKey('Space', true)}
                 onMouseUp={() => triggerVirtualKey('Space', false)}
                 onMouseLeave={() => triggerVirtualKey('Space', false)}
@@ -828,10 +847,10 @@ export function AnimationPreview({
                     stateMachineRef.current.setParameters({ isAttacking: true });
                   }
                 }}
-                className={`action-space-btn ${activeKeys.action || activeStateId === 'Action' ? 'active' : ''}`}
+                className={`action-space-btn ${activeStateId === 'Action' ? 'active' : ''}`}
                 title="Trigger Action State (Space)"
               >
-                <Zap size={14} className={activeKeys.action || activeStateId === 'Action' ? 'fill-current' : 'text-amber-400'} />
+                <Zap size={14} className={activeStateId === 'Action' ? 'fill-current' : 'text-amber-400'} />
                 <span>Action (Space)</span>
               </button>
 
