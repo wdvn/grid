@@ -684,11 +684,11 @@ export function AnimationPreview({
     <div className="glass-panel p-3 flex flex-col h-full overflow-hidden select-none">
       {/* Header & Mode Selector */}
       {/* Header Bar with Mode Switcher Tabs */}
-      <div className="flex items-center justify-between pb-2 border-b border-white/10 flex-shrink-0">
-        <div className="flex items-center gap-1 bg-slate-900/80 p-0.5 rounded-lg border border-white/10">
+      <div className="flex items-center justify-between pb-2 border-b border-white/10 flex-shrink-0 gap-1.5">
+        <div className="flex items-center bg-slate-900/90 p-0.5 rounded-lg border border-white/10 flex-shrink-0">
           <button
             onClick={() => setPreviewMode('character')}
-            className={`h-7 flex items-center gap-1.5 px-2.5 text-xs rounded font-semibold transition-all ${
+            className={`h-7 flex items-center gap-1.5 px-2 text-xs rounded font-semibold whitespace-nowrap transition-all ${
               previewMode === 'character'
                 ? 'bg-blue-600 text-white shadow'
                 : 'text-slate-400 hover:text-white'
@@ -696,12 +696,12 @@ export function AnimationPreview({
             title="Interactive character controller with WASD and 2D state machine"
           >
             <Gamepad2 size={13} />
-            <span>Character (WASD)</span>
+            <span>Character</span>
           </button>
 
           <button
             onClick={() => setPreviewMode('clip')}
-            className={`h-7 flex items-center gap-1.5 px-2.5 text-xs rounded font-semibold transition-all ${
+            className={`h-7 flex items-center gap-1.5 px-2 text-xs rounded font-semibold whitespace-nowrap transition-all ${
               previewMode === 'clip'
                 ? 'bg-blue-600 text-white shadow'
                 : 'text-slate-400 hover:text-white'
@@ -715,9 +715,9 @@ export function AnimationPreview({
 
         {/* State / Frame Counter Badge */}
         {previewMode === 'character' ? (
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1 flex-shrink-0">
             <span
-              className={`badge ${
+              className={`badge whitespace-nowrap ${
                 activeStateId === 'Action'
                   ? 'badge-amber animate-pulse'
                   : activeStateId === 'Run'
@@ -729,7 +729,7 @@ export function AnimationPreview({
             </span>
             <button
               onClick={() => setIsGraphModalOpen(true)}
-              className="btn btn-secondary h-7 px-2 text-xs font-semibold text-blue-400 border-blue-500/30 hover:bg-blue-500/10 flex items-center gap-1"
+              className="btn btn-secondary h-7 px-2 text-xs font-semibold text-blue-400 border-blue-500/30 hover:bg-blue-500/10 flex items-center gap-1 whitespace-nowrap"
               title="Open Animation Graph & State Machine Diagram"
             >
               <Network size={12} />
@@ -737,7 +737,7 @@ export function AnimationPreview({
             </button>
           </div>
         ) : (
-          <span className="badge badge-emerald">
+          <span className="badge badge-emerald whitespace-nowrap">
             {activeFrames.length > 0 ? `${currentFrameIndex + 1} / ${activeFrames.length}` : '0 / 0'}
           </span>
         )}
@@ -809,68 +809,73 @@ export function AnimationPreview({
           </div>
         )}
 
-        {/* Floating Frame Info Badge (Clip Mode) */}
-        {previewMode === 'clip' && currentGlobalFrame && (
-          <div className="absolute bottom-2 left-2 text-[10px] font-mono bg-slate-950/85 px-2 py-0.5 rounded text-slate-300 border border-white/15 shadow">
-            {currentGlobalFrame.name || `frame_${currentFrameIndex + 1}`} ({currentGlobalFrame.w}×{currentGlobalFrame.h})
-          </div>
-        )}
-
-        {/* Arena Mode Toggle & Center Reset (Character Mode) */}
-        {previewMode === 'character' && (
-          <div className="absolute top-2 left-2 flex items-center gap-1 bg-slate-950/80 p-0.5 rounded border border-white/10 shadow">
-            <button
-              onClick={() => setIsStationary(!isStationary)}
-              className={`text-[9px] font-mono px-2 py-0.5 rounded transition-colors ${
-                isStationary
-                  ? 'bg-slate-800 text-slate-400 hover:text-white'
-                  : 'bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30'
-              }`}
-              title="Toggle Walk in Arena or Run in Place"
-            >
-              {isStationary ? 'Stationary' : 'Arena Walk'}
-            </button>
-
-            {!isStationary && (
+        {/* Top Floating HUD: Left (Arena Mode or Frame Info) + Right (Quick Zoom Bar) */}
+        <div className="absolute top-2 left-2 right-2 flex items-center justify-between gap-2 pointer-events-none z-10">
+          {/* Left: Mode Toggle or Frame Info */}
+          {previewMode === 'character' ? (
+            <div className="pointer-events-auto flex items-center gap-1 bg-slate-950/90 backdrop-blur-sm px-1.5 py-0.5 rounded border border-white/10 shadow text-[9px] font-mono flex-shrink-0">
               <button
-                onClick={resetCharPosition}
-                className="btn-icon p-1 text-slate-400 hover:text-white"
-                title="Reset character to center"
+                onClick={() => setIsStationary(!isStationary)}
+                className={`px-1.5 py-0.5 rounded transition-colors whitespace-nowrap ${
+                  isStationary
+                    ? 'bg-slate-800 text-slate-300 hover:text-white'
+                    : 'bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30'
+                }`}
+                title="Toggle Walk in Arena or Run in Place"
               >
-                <RotateCcw size={10} />
+                {isStationary ? 'Stationary' : 'Arena Walk'}
               </button>
-            )}
+
+              {!isStationary && (
+                <button
+                  onClick={resetCharPosition}
+                  className="p-0.5 text-slate-400 hover:text-white flex items-center justify-center transition-colors"
+                  title="Reset character to center"
+                >
+                  <RotateCcw size={10} />
+                </button>
+              )}
+            </div>
+          ) : currentGlobalFrame ? (
+            <div
+              className="pointer-events-auto text-[9px] font-mono bg-slate-950/90 backdrop-blur-sm px-2 py-0.5 rounded text-slate-300 border border-white/10 shadow whitespace-nowrap truncate max-w-[130px]"
+              title={`${currentGlobalFrame.name || 'frame'} (${currentGlobalFrame.w}×${currentGlobalFrame.h})`}
+            >
+              {currentGlobalFrame.name || `frame_${currentFrameIndex + 1}`} ({currentGlobalFrame.w}×{currentGlobalFrame.h})
+            </div>
+          ) : <div />}
+
+          {/* Right: Quick Zoom Pills */}
+          <div className="pointer-events-auto flex items-center gap-0.5 bg-slate-950/90 backdrop-blur-sm p-0.5 rounded-md border border-white/10 shadow-md flex-shrink-0">
+            {['fit', 1, 2, 3, 4].map((z) => {
+              const isSelected = zoomScale === z;
+              const label = z === 'fit' ? 'Fit' : `${z}x`;
+              return (
+                <button
+                  key={String(z)}
+                  onClick={() => setZoomScale(z)}
+                  className={`px-1.5 py-0.5 text-[9px] font-mono rounded transition-colors whitespace-nowrap ${
+                    isSelected
+                      ? 'bg-blue-600 text-white font-bold shadow-sm'
+                      : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                  }`}
+                  title={z === 'fit' ? 'Auto-fit frame to preview viewport' : `Zoom ${z}x`}
+                >
+                  {label}
+                </button>
+              );
+            })}
           </div>
-        )}
+        </div>
+
+        {/* Bottom Floating Info Badge (Character Mode) */}
         {previewMode === 'character' && (
-          <div className="absolute bottom-2 left-2 flex items-center gap-1.5 text-[9px] font-mono text-slate-400 bg-slate-950/85 px-2 py-0.5 rounded border border-white/10 shadow">
+          <div className="absolute bottom-2 left-2 flex items-center gap-1.5 text-[9px] font-mono text-slate-400 bg-slate-950/90 backdrop-blur-sm px-2 py-0.5 rounded border border-white/10 shadow pointer-events-none whitespace-nowrap">
             <span className="text-blue-400 font-bold">WASD</span> Move
             <span className="text-slate-600">•</span>
             <span className="text-amber-400 font-bold">Space</span> Action
           </div>
         )}
-
-        {/* Quick Zoom Pill */}
-        <div className="absolute top-2 right-2 flex items-center gap-1 bg-slate-950/85 p-0.5 rounded-md border border-white/10 shadow-md z-10">
-          {['fit', 0.5, 1, 2, 3, 4].map((z) => {
-            const isSelected = zoomScale === z;
-            const label = z === 'fit' ? 'Fit' : `${z}x`;
-            return (
-              <button
-                key={String(z)}
-                onClick={() => setZoomScale(z)}
-                className={`px-1.5 py-0.5 text-[9px] font-mono rounded transition-colors ${
-                  isSelected
-                    ? 'bg-blue-600 text-white font-bold shadow-sm'
-                    : 'text-slate-400 hover:text-white hover:bg-slate-800'
-                }`}
-                title={z === 'fit' ? 'Auto-fit frame to preview viewport' : `Zoom ${z}x`}
-              >
-                {label}
-              </button>
-            );
-          })}
-        </div>
       </div>
 
       {/* Footer Controls */}

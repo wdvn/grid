@@ -198,6 +198,11 @@ kbd {
 .absolute { position: absolute; }
 .fixed { position: fixed; }
 .inset-0 { inset: 0; }
+.inset-x-0 { left: 0; right: 0; }
+.inset-x-1 { left: 0.25rem; right: 0.25rem; }
+.inset-x-2 { left: 0.5rem; right: 0.5rem; }
+.inset-x-3 { left: 0.75rem; right: 0.75rem; }
+.inset-x-4 { left: 1rem; right: 1rem; }
 .top-0 { top: 0; }
 .right-0 { right: 0; }
 .bottom-0 { bottom: 0; }
@@ -848,6 +853,7 @@ kbd {
   cursor: pointer;
   transition: all 0.08s ease;
   user-select: none;
+  white-space: nowrap;
 }
 
 .action-space-btn:hover {
