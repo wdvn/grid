@@ -1,9 +1,8 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Header } from './components/Header';
-import { CanvasWorkspace } from './components/CanvasWorkspace';
-import { FrameProperties } from './components/FrameProperties';
-import { AnimationPreview } from './components/AnimationPreview';
-import { FrameTimeline } from './components/FrameTimeline';
+import { CreatorModule } from './components/creator/CreatorModule';
+import { AnimatorModule } from './components/animator/AnimatorModule';
+import { SceneModule } from './components/scene/SceneModule';
 import { QuickGridModal } from './components/QuickGridModal';
 import { ExportModal } from './components/ExportModal';
 import { ImportAtlasModal } from './components/ImportAtlasModal';
@@ -14,6 +13,9 @@ import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { generateDefaultAnimations, createNewAnimation, groupFramesByRows } from './utils/animationClips';
 
 export default function App() {
+  // 3-Module Architecture: 'creator' | 'animator' | 'scene'
+  const [activeModule, setActiveModule] = useState('animator');
+
   // Multi-Sheet Workspace State: Array of { id, name, imageSrc, imageDimensions, imageElement }
   const [sheets, setSheets] = useState([]);
   const [activeSheetId, setActiveSheetId] = useState(null);
@@ -749,6 +751,36 @@ export default function App() {
     setIsAnimationPlaying((prev) => !prev);
   };
 
+  // Switch Module via Keyboard Shortcuts: 1 -> Creator, 2 -> Animator, 3 -> Scene 3D
+  useEffect(() => {
+    const handleModuleShortcut = (e) => {
+      const activeTag = document.activeElement?.tagName?.toLowerCase();
+      if (activeTag === 'input' || activeTag === 'textarea' || activeTag === 'select') return;
+
+      if (e.key === '1') {
+        setActiveModule('creator');
+      } else if (e.key === '2') {
+        setActiveModule('animator');
+      } else if (e.key === '3') {
+        setActiveModule('scene');
+      }
+    };
+
+    window.addEventListener('keydown', handleModuleShortcut);
+    return () => window.removeEventListener('keydown', handleModuleShortcut);
+  }, []);
+
+  // Bridge: Import newly created pixel sprite sheet from Creator into Animator
+  const handleImportFromCreator = useCallback((sheetData, initialFrames, initialAnimations) => {
+    setSheets((prev) => [sheetData, ...prev]);
+    setActiveSheetId(sheetData.id);
+    setFrames((prev) => [...initialFrames, ...prev]);
+    setSelectedFrameId(initialFrames[0]?.id || null);
+    setAnimations((prev) => [...initialAnimations, ...prev]);
+    setSelectedAnimationId(initialAnimations[0]?.id || null);
+    setActiveModule('animator');
+  }, []);
+
   // Keyboard Shortcuts Hook
   useKeyboardShortcuts({
     selectedFrameId,
@@ -763,7 +795,7 @@ export default function App() {
 
   return (
     <div className="app-container">
-      {/* Top Header Navbar */}
+      {/* Top Header Navbar with 3-Module Switcher */}
       <Header
         imageSrc={imageSrc}
         sheets={sheets}
@@ -774,87 +806,44 @@ export default function App() {
         onOpenExportModal={() => setIsExportModalOpen(true)}
         onOpenImportAtlasModal={() => setIsImportAtlasModalOpen(true)}
         frameCount={frames.length}
+        activeModule={activeModule}
+        onSelectModule={setActiveModule}
       />
 
-      {/* Main 3-Column Studio Workspace */}
-      <main className="main-workspace">
-        {/* Left Column: Frame Properties & Pivot Inspector */}
-        <FrameProperties
-          frames={frames}
-          selectedFrameId={selectedFrameId}
-          selectedFrameIds={selectedFrameIds}
-          activeAnimation={animations.find(a => a.id === selectedAnimationId) || animations[0]}
-          activeSheetId={activeSheetId}
-          onSelectFrame={handleSelectFrame}
-          onSelectAllFrames={handleSelectAllFrames}
-          onDeselectAllFrames={handleDeselectAllFrames}
-          onApplySelectedToAnimation={handleApplySelectedFrames}
-          onAddSelectedToAnimation={handleAddSelectedFrames}
-          onUpdateFrame={handleUpdateFrame}
-          onDuplicateFrame={handleDuplicateFrame}
-          onDeleteFrame={handleDeleteFrame}
-          onMoveFrameOrder={handleMoveFrameOrder}
-          imageDimensions={imageDimensions}
-          sheetMap={sheetMap}
-        />
+      {/* Module 1: Creator (Pixel Canvas, Palette, Filters, Procedural Generator) */}
+      {activeModule === 'creator' && (
+        <CreatorModule onSendToAnimator={handleImportFromCreator} />
+      )}
 
-        {/* Center Column: Interactive Sprite Sheet Canvas with Multi-Sheet Tab Bar */}
-        <CanvasWorkspace
+      {/* Module 2: Animator (3-Column Slicing Studio & Godot SpriteFrames Dock) */}
+      {activeModule === 'animator' && (
+        <AnimatorModule
           imageSrc={imageSrc}
           imageDimensions={imageDimensions}
-          frames={frames}
-          selectedFrameId={selectedFrameId}
-          selectedFrameIds={selectedFrameIds}
-          onSelectFrame={handleSelectFrame}
-          onAddFrame={handleAddFrame}
-          onUpdateFrame={handleUpdateFrame}
-          onAutoDetect={handleAutoDetect}
-          onOpenQuickGrid={() => setIsGridModalOpen(true)}
-          onFileUpload={handleFileUpload}
-          onOpenImportAtlasModal={() => setIsImportAtlasModalOpen(true)}
+          imageElement={imageElement}
           sheets={sheets}
+          sheetMap={sheetMap}
           activeSheetId={activeSheetId}
           onSelectSheet={handleSelectSheet}
           onAddSheetFile={handleAddSheetFile}
           onAddSheetPreset={handleAddSheetPreset}
           onDeleteSheet={handleDeleteSheet}
           onRenameSheet={handleRenameSheet}
-        />
-
-        {/* Right Column: Animation Preview Player with Cross-Sheet Character Mode */}
-        <AnimationPreview
-          imageElement={imageElement}
-          sheets={sheets}
-          sheetMap={sheetMap}
           frames={frames}
           selectedFrameId={selectedFrameId}
           selectedFrameIds={selectedFrameIds}
           onSelectFrame={handleSelectFrame}
-          animations={animations}
-          selectedAnimationId={selectedAnimationId}
-          onSelectAnimation={handleSelectAnimation}
-          previewMode={previewMode}
-          onPreviewModeChange={setPreviewMode}
-          isPlaying={isAnimationPlaying}
-          onTogglePlay={handleTogglePlay}
-          currentFrameIndex={playbackFrameIndex}
-          onFrameIndexChange={setPlaybackFrameIndex}
-        />
-      </main>
-
-      {/* Bottom Timeline Strip (Godot SpriteFrames Bottom Dock) */}
-      <footer className="app-timeline">
-        <FrameTimeline
-          imageElement={imageElement}
-          sheetMap={sheetMap}
-          frames={frames}
-          selectedFrameId={selectedFrameId}
-          selectedFrameIds={selectedFrameIds}
-          activeSheetId={activeSheetId}
-          onSelectFrame={handleSelectFrame}
+          onAddFrame={handleAddFrame}
+          onUpdateFrame={handleUpdateFrame}
           onDuplicateFrame={handleDuplicateFrame}
           onDeleteFrame={handleDeleteFrame}
           onMoveFrameOrder={handleMoveFrameOrder}
+          onSelectAllFrames={handleSelectAllFrames}
+          onDeselectAllFrames={handleDeselectAllFrames}
+          onAutoDetect={handleAutoDetect}
+          onOpenQuickGrid={() => setIsGridModalOpen(true)}
+          onFileUpload={handleFileUpload}
+          onOpenImportAtlasModal={() => setIsImportAtlasModalOpen(true)}
           animations={animations}
           selectedAnimationId={selectedAnimationId}
           onSelectAnimation={handleSelectAnimation}
@@ -863,16 +852,30 @@ export default function App() {
           onDeleteAnimation={handleDeleteAnimation}
           onUpdateAnimation={handleUpdateAnimation}
           onApplySelectedFrames={handleApplySelectedFrames}
-          onAddSelectedFrames={handleAddSelectedFrames}
-          onAddSheetFrames={handleAddSheetFrames}
+          handleAddSelectedFrames={handleAddSelectedFrames}
+          handleAddSheetFrames={handleAddSheetFrames}
           onAddFrameToAnimation={handleAddFrameToAnimation}
           onRemoveFrameFromAnimation={handleRemoveFrameFromAnimation}
           onReorderAnimationFrames={handleReorderAnimationFrames}
-          isPlaying={isAnimationPlaying}
+          previewMode={previewMode}
+          onPreviewModeChange={setPreviewMode}
+          isAnimationPlaying={isAnimationPlaying}
           onTogglePlay={handleTogglePlay}
           playbackFrameIndex={playbackFrameIndex}
+          onFrameIndexChange={setPlaybackFrameIndex}
         />
-      </footer>
+      )}
+
+      {/* Module 3: Scene 3D (Interactive WebGL Playground with Billboard Character) */}
+      {activeModule === 'scene' && (
+        <SceneModule
+          sheets={sheets}
+          sheetMap={sheetMap}
+          frames={frames}
+          animations={animations}
+          activeAnimationId={selectedAnimationId}
+        />
+      )}
 
       {/* Modals */}
       <QuickGridModal

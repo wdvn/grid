@@ -83,16 +83,30 @@ Giao diện áp dụng phong cách **Dark-mode Game Studio IDE** (kết hợp ti
 
 ## 3. Quy chuẩn Thành phần Giao diện (Component Standards)
 
-### 3.1. Nút bấm (Buttons)
+### 3.1. Quy chuẩn Nút Bấm & Chống Vỡ Layout (Button Sizing & Anti-Breakage Standards)
 
-Mọi nút bấm phải sử dụng các class chuẩn định nghĩa trong index.css:
+Mọi nút bấm trong toàn bộ ứng dụng (kể cả Creator, Animator, Scene) **bắt buộc tuân thủ 3 tầng kích thước chuẩn sau để chống vỡ layout và tiết kiệm diện tích**:
 
-- **Nút chính (Primary)**: `.btn .btn-primary` (Gradient blue-500 to blue-700, shadow glow).
-- **Nút thứ cấp (Secondary)**: `.btn .btn-secondary` (Nền kính mờ `rgba(255,255,255,0.06)`, viền mờ).
-- **Nút màu nhấn (Accent/Action)**: `.btn .btn-accent` (Emerald gradient) hoặc `.action-space-btn` (Amber).
-- **Nút nguy hiểm (Danger)**: `.btn .btn-danger` (Rose mờ, chữ rose, viền rose).
-- **Nút icon (Icon-only)**: `.btn-icon` (28x28px) hoặc `.btn-icon-sm` (24x24px).
-- **Độ cao nút chuẩn**: `.btn-sm`: `24px` | `.btn`: `28px` | `.btn-lg`: `32px`.
+| Tầng kích thước | Chiều cao / Kích thước | Padding & Font | Mục đích & Phạm vi áp dụng |
+| :--- | :--- | :--- | :--- |
+| **Micro / Icon-only** | `24px × 24px` (`h-6 w-6`) | `p-1`, icon 12-13px | Nút cọ vẽ (1p-6p), Palette swatch, nút đóng/thu nhỏ, undo/redo |
+| **Standard Toolbar** | `28px` (`h-7`) | `px-2 py-1`, `text-xs` (11-12px) | Nút công cụ T-Panel, nút timeline, tabs điều hướng, dropdowns |
+| **Primary / CTA** | `32px` (`h-8`) | `px-3 py-1.5`, `text-xs font-bold` | Nút hành động chính (Send to Animator, Export, Apply Modal) |
+
+#### ⚠️ 5 Quy tắc Bắt Buộc Khi Thiết Kế Nút Bấm:
+1. **Chống gãy chữ (No Line Wrapping)**:
+   - Tất cả nút bấm bắt buộc có thuộc tính `whitespace-nowrap flex-shrink-0`. Tuyệt đối không để chữ xuống dòng bên trong nút (ví dụ rớt chữ `1p\nFine`) làm biến dạng chiều cao dòng.
+2. **Icon-only với Tooltip trên thanh hẹp**:
+   - Các nút chức năng trên thanh Timeline, Tool Shelf (T-Panel) hoặc hàng công cụ hẹp **phải ưu tiên dạng Icon-only kèm title/tooltip** (ví dụ nút Duplicate dùng icon `<Copy size={13} />`, nút Delete dùng `<Trash2 size={13} />`), cấm để nguyên chữ dài `Duplicate Frame` làm tràn chiều ngang.
+3. **Phân bổ Viewport Budget (Không lãng phí diện tích)**:
+   - **Đỉnh màn hình (Top)**: Tối đa 1 Header chính (`44px` / `h-11`) và 1 thanh ngữ cảnh công cụ Tool Context Bar (`30px` / `h-7.5`). Tuyệt đối **không được xếp chồng 3 tầng header** gây lấn chiếm không gian canvas.
+   - **Cột công cụ trái (Left T-Panel)**: Rộng cố định `38px - 42px`, chứa icon xếp dọc thẳng hàng.
+   - **Cột thuộc tính phải (Right N-Panel)**: Rộng cố định `280px - 300px`, padding tối đa `p-2.5` để dành trọn diện tích cho Canvas Viewport.
+   - **Thanh Timeline đáy (Bottom Dock)**: Chiều cao chuẩn `44px - 48px`, các nút sắp xếp gọn gàng theo chiều ngang.
+4. **Quy chuẩn Grid cho Swatches & Options (Chống rớt 1 cột dọc)**:
+   - Bảng màu swatches, các nút chọn màu outline, hoặc danh sách density **bắt buộc dùng layout lưới đa cột rõ ràng** (ví dụ: `display: grid; gridTemplateColumns: repeat(8, 1fr); gap: 4px;` cho 16 màu thành 2 hàng 8 cột, cao $\le 56\text{px}$). Tuyệt đối không dùng dynamic class thiếu style làm rớt thành 1 cột dọc 16 hàng chiếm 600px!
+5. **Đồng nhất chiều cao hàng (Consistent Row Height)**:
+   - Khi xếp nhiều nút cạnh nhau trên 1 hàng (`flex items-center`), tất cả nút trong hàng phải có cùng chiều cao (ví dụ cùng `h-6` hoặc `h-7`). Không trộn lẫn nút có padding `py-0.5` với nút `py-2.5`.
 
 ### 3.2. Form Inputs & Selects
 

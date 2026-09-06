@@ -11,7 +11,9 @@ export function Header({
   onClear,
   onOpenExportModal,
   onOpenImportAtlasModal,
-  frameCount
+  frameCount,
+  activeModule = 'animator',
+  onSelectModule
 }) {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
@@ -21,7 +23,7 @@ export function Header({
   };
 
   return (
-    <header className="app-header">
+    <header className="app-header flex items-center justify-between">
       {/* Brand Logo & Name */}
       <div className="brand-logo">
         <div className="flex items-center justify-center w-7 h-7 rounded-md bg-blue-500/20 text-blue-400 border border-blue-500/30 shadow-sm flex-shrink-0">
@@ -37,6 +39,51 @@ export function Header({
           </span>
         </div>
       </div>
+
+      {/* Center: 3-Module Navigation Switcher */}
+      <nav className="flex items-center gap-1 bg-slate-950/80 p-1 rounded-xl border border-white/10 shadow-inner">
+        <button
+          onClick={() => onSelectModule?.('creator')}
+          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+            activeModule === 'creator'
+              ? 'bg-blue-600 text-white shadow-md shadow-blue-500/30'
+              : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+          }`}
+          title="Creator Module (Asset Generation & Pixel Filters) [Key 1]"
+        >
+          <span className="text-sm">🎨</span>
+          <span>Creator</span>
+          <kbd className="text-[9px] py-0 px-1 ml-0.5 text-slate-300">1</kbd>
+        </button>
+
+        <button
+          onClick={() => onSelectModule?.('animator')}
+          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+            activeModule === 'animator'
+              ? 'bg-blue-600 text-white shadow-md shadow-blue-500/30'
+              : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+          }`}
+          title="Animator Module (Multi-Sheet Slicing, Godot Timeline & Mecanim Graph) [Key 2]"
+        >
+          <span className="text-sm">🎬</span>
+          <span>Animator</span>
+          <kbd className="text-[9px] py-0 px-1 ml-0.5 text-slate-300">2</kbd>
+        </button>
+
+        <button
+          onClick={() => onSelectModule?.('scene')}
+          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+            activeModule === 'scene'
+              ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-md shadow-purple-500/30'
+              : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+          }`}
+          title="Scene 3D Module (3D Demo Sandbox with WASD & Follow Camera) [Key 3]"
+        >
+          <span className="text-sm">🎮</span>
+          <span>Scene 3D</span>
+          <kbd className="text-[9px] py-0 px-1 ml-0.5 text-slate-300">3</kbd>
+        </button>
+      </nav>
 
       {/* Action Buttons Toolbar */}
       <div className="flex items-center gap-1.5">
