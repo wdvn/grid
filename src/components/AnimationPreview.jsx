@@ -19,7 +19,8 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  Wind
+  Wind,
+  Sparkles
 } from 'lucide-react';
 import { CharacterStateMachine, createDefaultCharacterGraph } from '../utils/animationGraph';
 import { StateGraphModal } from './StateGraphModal';
@@ -874,8 +875,8 @@ export function AnimationPreview({
               </div>
             </div>
 
-            {/* Virtual Action Button & Play Pause */}
-            <div className="flex items-center gap-1.5">
+            {/* Virtual Action Button, Custom Parameter Controls & Play Pause */}
+            <div className="flex items-center gap-1.5 flex-wrap">
               <button
                 ref={btnActionRef}
                 onMouseDown={() => triggerVirtualKey('Space', true)}
@@ -894,6 +895,38 @@ export function AnimationPreview({
                 <Zap size={13} className={activeStateId === 'Action' ? 'fill-current' : 'text-amber-400'} />
                 <span>Action (Space)</span>
               </button>
+
+              {/* Dynamic Parameter Triggers / Toggles (e.g. is_attacked, health, etc.) */}
+              {Object.entries(graphConfig.parameters || {})
+                .filter(([k]) => !['speed', 'moveX', 'moveY', 'isAttacking'].includes(k))
+                .map(([paramKey, defaultVal]) => {
+                  const paramType = graphConfig.parameterTypes?.[paramKey] || (typeof defaultVal === 'boolean' ? 'Bool' : 'Float');
+                  const isBool = paramType === 'Bool' || paramType === 'Trigger';
+
+                  return (
+                    <button
+                      key={paramKey}
+                      onClick={() => {
+                        if (stateMachineRef.current) {
+                          if (paramType === 'Trigger') {
+                            stateMachineRef.current.setParameters({ [paramKey]: true });
+                          } else if (isBool) {
+                            const cur = !!stateMachineRef.current.parameters[paramKey];
+                            stateMachineRef.current.setParameters({ [paramKey]: !cur });
+                          } else {
+                            const cur = Number(stateMachineRef.current.parameters[paramKey] || 0);
+                            stateMachineRef.current.setParameters({ [paramKey]: cur > 0 ? 0 : 1 });
+                          }
+                        }
+                      }}
+                      className="btn h-7 px-2 text-xs bg-purple-500/20 hover:bg-purple-500/30 text-purple-200 border border-purple-500/40 rounded-lg flex items-center gap-1 transition-colors"
+                      title={`Trigger/Toggle parameter: ${paramKey}`}
+                    >
+                      <Sparkles size={11} className="text-purple-400" />
+                      <span>{paramKey}</span>
+                    </button>
+                  );
+                })}
 
               <button
                 onClick={togglePlay}

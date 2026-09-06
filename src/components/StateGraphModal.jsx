@@ -19,7 +19,9 @@ import {
   ChevronRight,
   Info,
   Link2,
-  Compass
+  Compass,
+  SlidersHorizontal,
+  Edit2
 } from 'lucide-react';
 import {
   addTransitionToGraph,
@@ -27,7 +29,10 @@ import {
   updateTransitionInGraph,
   addStateToGraph,
   removeStateFromGraph,
-  createDefaultCharacterGraph
+  createDefaultCharacterGraph,
+  addParameterToGraph,
+  removeParameterFromGraph,
+  updateParameterInGraph
 } from '../utils/animationGraph';
 
 export function StateGraphModal({
@@ -44,6 +49,13 @@ export function StateGraphModal({
   pendingGraphRef.current = localGraph;
 
   const [selectedItem, setSelectedItem] = useState(null); // { type: 'state', id } | { type: 'transition', id }
+  const [sidebarTab, setSidebarTab] = useState('inspector'); // 'inspector' | 'parameters'
+  const [newParamFormOpen, setNewParamFormOpen] = useState(false);
+  const [newParamName, setNewParamName] = useState('');
+  const [newParamType, setNewParamType] = useState('Float'); // 'Float' | 'Int' | 'Bool' | 'Trigger'
+  const [newParamDefault, setNewParamDefault] = useState('0.0');
+  const [customParamInputIdx, setCustomParamInputIdx] = useState(null); // For typing custom param name in condition row
+
   const [zoom, setZoom] = useState(1.0);
   const [pan, setPan] = useState({ x: 0, y: 0 });
 
@@ -98,6 +110,38 @@ export function StateGraphModal({
   const states = localGraph?.states || {};
   const transitions = localGraph?.transitions || [];
   const defaultState = localGraph?.defaultState || 'Idle';
+
+  const currentParameters = useMemo(() => {
+    return {
+      speed: 0.0,
+      moveX: 0.0,
+      moveY: -1.0,
+      isAttacking: false,
+      is_attacked: false,
+      ...(localGraph?.parameters || {})
+    };
+  }, [localGraph?.parameters]);
+
+  const currentParameterTypes = useMemo(() => {
+    return {
+      speed: 'Float',
+      moveX: 'Float',
+      moveY: 'Float',
+      isAttacking: 'Trigger',
+      is_attacked: 'Bool',
+      ...(localGraph?.parameterTypes || {})
+    };
+  }, [localGraph?.parameterTypes]);
+
+  const allKnownParamNames = useMemo(() => {
+    const set = new Set(Object.keys(currentParameters));
+    (localGraph?.transitions || []).forEach(t => {
+      (t.conditions || []).forEach(c => {
+        if (c.param) set.add(c.param);
+      });
+    });
+    return Array.from(set);
+  }, [currentParameters, localGraph?.transitions]);
 
   // Special node positions
   const anyStatePos = localGraph?.anyStatePosition || { x: 50, y: 50 };
@@ -806,20 +850,23 @@ export function StateGraphModal({
                       />
                       {/* Interactive Transition Condition Pill */}
                       <foreignObject
-                        x={mx - 45}
+                        x={mx - 60}
                         y={my - 12}
-                        width="90"
+                        width="120"
                         height="24"
                         style={{ overflow: 'visible', pointerEvents: 'none' }}
                       >
                         <div
-                          className={`text-[9px] font-mono px-1.5 py-0.5 rounded text-center border shadow transition-transform group-hover:scale-105 pointer-events-auto ${
+                          className={`text-[9px] font-mono px-1.5 py-0.5 rounded text-center border shadow transition-transform group-hover:scale-105 pointer-events-auto truncate max-w-[120px] ${
                             isSelected
                               ? 'bg-blue-600 text-white border-blue-400 font-bold'
                               : 'bg-slate-900/90 text-slate-300 border-white/20'
                           }`}
+                          title={t.conditions?.length ? t.conditions.map(c => `${c.param} ${c.operator} ${c.value}`).join(' && ') : 'Instant Transition (No conditions)'}
                         >
-                          {t.conditions?.[0]?.param || 'Transition'}
+                          {t.conditions?.length
+                            ? t.conditions.map(c => `${c.param} ${c.operator} ${c.value}`).join(', ')
+                            : 'Instant'}
                         </div>
                       </foreignObject>
                     </g>
@@ -1012,411 +1059,685 @@ export function StateGraphModal({
               })}
             </div>
           </div>
-
+          
           {/* 2. INSPECTOR SIDEBAR (Unity Animator Style) */}
-          <div className="w-72 bg-slate-900/95 border-l border-white/10 flex flex-col overflow-y-auto flex-shrink-0 p-3 space-y-4">
-            {/* Header */}
-            <div className="flex items-center justify-between pb-2 border-b border-white/10">
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
-                <Sliders size={13} className="text-blue-400" />
-                Inspector
-              </span>
-              <span className="text-[10px] text-slate-500 font-mono">
-                {selectedItem ? selectedItem.type.toUpperCase() : 'OVERVIEW'}
-              </span>
+          <div className="w-80 bg-slate-900/95 border-l border-white/10 flex flex-col overflow-y-auto flex-shrink-0 p-3 space-y-3">
+            {/* Header Tabs */}
+            <div className="flex items-center gap-1 border-b border-white/10 pb-2 flex-shrink-0">
+              <button
+                onClick={() => setSidebarTab('inspector')}
+                className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${
+                  sidebarTab === 'inspector'
+                    ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
+                    : 'text-slate-400 hover:text-white hover:bg-slate-800/80'
+                }`}
+              >
+                <Sliders size={13} />
+                <span>Inspector</span>
+              </button>
+              <button
+                onClick={() => setSidebarTab('parameters')}
+                className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${
+                  sidebarTab === 'parameters'
+                    ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
+                    : 'text-slate-400 hover:text-white hover:bg-slate-800/80'
+                }`}
+              >
+                <SlidersHorizontal size={13} />
+                <span>Parameters</span>
+                <span className="text-[10px] px-1.5 py-0.2 bg-white/20 rounded-full font-mono font-semibold">
+                  {allKnownParamNames.length}
+                </span>
+              </button>
             </div>
 
-            {/* A. TRANSITION INSPECTOR */}
-            {selectedTransition && (
-              <div className="space-y-3">
-                <div className="space-y-1">
-                  <div className="text-[11px] text-slate-400 flex items-center gap-1">
-                    <span>Transition:</span>
-                    <span className="font-bold text-slate-200">{selectedTransition.from}</span>
-                    <ArrowRight size={11} className="text-blue-400" />
-                    <span className="font-bold text-slate-200">{selectedTransition.to}</span>
+            {/* TAB CONTENT: PARAMETERS MANAGER */}
+            {sidebarTab === 'parameters' && (
+              <div className="space-y-3.5 animate-fadeIn">
+                <div className="flex items-center justify-between">
+                  <div className="text-[11px] font-bold uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
+                    <SlidersHorizontal size={13} className="text-blue-400" />
+                    Animator Parameters
                   </div>
+                  <button
+                    onClick={() => setNewParamFormOpen(prev => !prev)}
+                    className="btn btn-primary text-[10px] px-2 py-0.5 flex items-center gap-1"
+                  >
+                    <Plus size={11} /> Add Parameter
+                  </button>
                 </div>
 
-                {/* Conditions Editor */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase">
-                      Conditions:
-                    </label>
-                    <button
-                      onClick={() => {
-                        const newCond = { param: 'speed', operator: '>', value: 0.1 };
-                        notifyUpdate(
-                          updateTransitionInGraph(localGraph, selectedTransition.id, {
-                            conditions: [...(selectedTransition.conditions || []), newCond]
-                          }),
-                          true
-                        );
-                      }}
-                      className="text-[10px] text-blue-400 hover:text-blue-300 flex items-center gap-0.5"
-                    >
-                      <Plus size={11} /> Add
-                    </button>
+                {/* New Parameter Creation Form */}
+                {newParamFormOpen && (
+                  <div className="p-3 rounded-lg bg-slate-950 border border-blue-500/40 space-y-2.5 shadow-lg">
+                    <div className="text-[11px] font-bold text-blue-300 flex items-center gap-1">
+                      <Sparkles size={12} /> New Parameter
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] text-slate-400 font-mono">Name:</label>
+                      <input
+                        type="text"
+                        value={newParamName}
+                        onChange={(e) => setNewParamName(e.target.value.trim().replace(/\s+/g, '_'))}
+                        placeholder="e.g. is_attacked, health, jump"
+                        className="input-field text-xs py-1 w-full font-mono text-slate-100"
+                        autoFocus
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-1">
+                        <label className="text-[10px] text-slate-400 font-mono">Type:</label>
+                        <select
+                          value={newParamType}
+                          onChange={(e) => {
+                            const t = e.target.value;
+                            setNewParamType(t);
+                            if (t === 'Bool' || t === 'Trigger') {
+                              setNewParamDefault('false');
+                            } else if (t === 'Int') {
+                              setNewParamDefault('0');
+                            } else {
+                              setNewParamDefault('0.0');
+                            }
+                          }}
+                          className="input-field text-xs py-1 w-full"
+                        >
+                          <option value="Float">Float</option>
+                          <option value="Int">Int</option>
+                          <option value="Bool">Bool</option>
+                          <option value="Trigger">Trigger</option>
+                        </select>
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] text-slate-400 font-mono">Default Value:</label>
+                        {newParamType === 'Bool' || newParamType === 'Trigger' ? (
+                          <select
+                            value={newParamDefault}
+                            onChange={(e) => setNewParamDefault(e.target.value)}
+                            className="input-field text-xs py-1 w-full font-mono"
+                          >
+                            <option value="false">false</option>
+                            <option value="true">true</option>
+                          </select>
+                        ) : (
+                          <input
+                            type="number"
+                            step={newParamType === 'Int' ? '1' : '0.1'}
+                            value={newParamDefault}
+                            onChange={(e) => setNewParamDefault(e.target.value)}
+                            className="input-field text-xs py-1 w-full font-mono"
+                          />
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 pt-1">
+                      <button
+                        onClick={() => {
+                          if (!newParamName.trim()) {
+                            showToast('Please enter a parameter name');
+                            return;
+                          }
+                          const defaultVal = (newParamType === 'Bool' || newParamType === 'Trigger')
+                            ? newParamDefault === 'true'
+                            : newParamType === 'Int'
+                            ? parseInt(newParamDefault, 10) || 0
+                            : parseFloat(newParamDefault) || 0.0;
+
+                          notifyUpdate(
+                            addParameterToGraph(localGraph, newParamName.trim(), newParamType, defaultVal),
+                            true
+                          );
+                          showToast(`✓ Added parameter: ${newParamName.trim()}`);
+                          setNewParamName('');
+                          setNewParamDefault('0.0');
+                          setNewParamFormOpen(false);
+                        }}
+                        className="btn btn-primary text-xs py-1 flex-1 font-semibold"
+                      >
+                        Create Parameter
+                      </button>
+                      <button
+                        onClick={() => {
+                          setNewParamName('');
+                          setNewParamFormOpen(false);
+                        }}
+                        className="btn btn-secondary text-xs py-1 px-3"
+                      >
+                        Cancel
+                      </button>
+                    </div>
                   </div>
+                )}
 
-                  <div className="space-y-1.5">
-                    {(selectedTransition.conditions || []).map((cond, idx) => (
-                      <div key={idx} className="p-2 rounded bg-slate-950 border border-white/10 space-y-1 text-xs">
-                        <div className="flex items-center gap-1">
-                          <select
-                            value={cond.param}
-                            onChange={(e) => {
-                              const nextConds = [...selectedTransition.conditions];
-                              nextConds[idx] = { ...cond, param: e.target.value };
-                              notifyUpdate(updateTransitionInGraph(localGraph, selectedTransition.id, { conditions: nextConds }), true);
-                            }}
-                            className="input-field text-xs py-0.5 flex-1"
-                          >
-                            <option value="speed">speed</option>
-                            <option value="moveX">moveX</option>
-                            <option value="moveY">moveY</option>
-                            <option value="isAttacking">isAttacking</option>
-                          </select>
+                {/* List of Parameters */}
+                <div className="space-y-1.5">
+                  {Object.entries(currentParameters).map(([key, val]) => {
+                    const type = currentParameterTypes[key] || (typeof val === 'boolean' ? 'Bool' : typeof val === 'number' ? 'Float' : 'Trigger');
+                    const isBuiltin = ['speed', 'moveX', 'moveY', 'isAttacking'].includes(key);
 
-                          <select
-                            value={cond.operator}
-                            onChange={(e) => {
-                              const nextConds = [...selectedTransition.conditions];
-                              nextConds[idx] = { ...cond, operator: e.target.value };
-                              notifyUpdate(updateTransitionInGraph(localGraph, selectedTransition.id, { conditions: nextConds }), true);
-                            }}
-                            className="input-field text-xs py-0.5 w-14"
-                          >
-                            <option value=">">&gt;</option>
-                            <option value="<">&lt;</option>
-                            <option value="==">==</option>
-                            <option value="!=">!=</option>
-                            <option value="<=">&lt;=</option>
-                            <option value=">=">&gt;=</option>
-                          </select>
-
-                          <button
-                            onClick={() => {
-                              const nextConds = selectedTransition.conditions.filter((_, i) => i !== idx);
-                              notifyUpdate(updateTransitionInGraph(localGraph, selectedTransition.id, { conditions: nextConds }), true);
-                            }}
-                            className="text-slate-500 hover:text-rose-400 p-0.5"
-                          >
-                            <Trash2 size={12} />
-                          </button>
+                    return (
+                      <div
+                        key={key}
+                        className="p-2 rounded-lg bg-slate-950 border border-white/10 hover:border-white/20 flex items-center justify-between transition-colors text-xs"
+                      >
+                        <div className="space-y-0.5 min-w-0 flex-1 mr-2">
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-mono font-bold text-slate-200 truncate">{key}</span>
+                            <span
+                              className={`text-[9px] font-bold px-1.5 py-0.2 rounded border flex-shrink-0 ${
+                                type === 'Float'
+                                  ? 'bg-blue-500/20 text-blue-300 border-blue-500/30'
+                                  : type === 'Int'
+                                  ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30'
+                                  : type === 'Bool'
+                                  ? 'bg-purple-500/20 text-purple-300 border-purple-500/30'
+                                  : 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                              }`}
+                            >
+                              {type}
+                            </span>
+                          </div>
+                          <div className="text-[10px] text-slate-400 font-mono">
+                            Default: <span className="text-slate-300 font-semibold">{String(val)}</span>
+                          </div>
                         </div>
 
-                        <div className="flex items-center gap-1">
-                          <span className="text-[10px] text-slate-500">Value:</span>
-                          {cond.param === 'isAttacking' ? (
-                            <select
-                              value={String(cond.value)}
-                              onChange={(e) => {
-                                const nextConds = [...selectedTransition.conditions];
-                                nextConds[idx] = { ...cond, value: e.target.value === 'true' };
-                                notifyUpdate(updateTransitionInGraph(localGraph, selectedTransition.id, { conditions: nextConds }), true);
+                        <div className="flex items-center gap-1 flex-shrink-0">
+                          {!isBuiltin && (
+                            <button
+                              onClick={() => {
+                                notifyUpdate(removeParameterFromGraph(localGraph, key), true);
+                                showToast(`Removed parameter: ${key}`);
                               }}
-                              className="input-field text-xs py-0.5 flex-1"
+                              className="text-slate-500 hover:text-rose-400 p-1 transition-colors"
+                              title={`Delete parameter ${key}`}
                             >
-                              <option value="true">true</option>
-                              <option value="false">false</option>
-                            </select>
-                          ) : (
-                            <input
-                              type="number"
-                              step="0.1"
-                              value={cond.value}
-                              onChange={(e) => {
-                                const nextConds = [...selectedTransition.conditions];
-                                nextConds[idx] = { ...cond, value: parseFloat(e.target.value) || 0 };
-                                notifyUpdate(updateTransitionInGraph(localGraph, selectedTransition.id, { conditions: nextConds }), true);
-                              }}
-                              className="input-field text-xs py-0.5 flex-1 font-mono"
-                            />
+                              <Trash2 size={13} />
+                            </button>
                           )}
                         </div>
                       </div>
-                    ))}
-
-                    {(!selectedTransition.conditions || selectedTransition.conditions.length === 0) && (
-                      <div className="text-[11px] text-slate-500 italic p-2 bg-slate-950 rounded border border-white/5 text-center">
-                        Instant Transition (No conditions)
-                      </div>
-                    )}
-                  </div>
+                    );
+                  })}
                 </div>
 
-                {/* Delete Transition Button */}
-                <button
-                  onClick={() => {
-                    notifyUpdate(removeTransitionFromGraph(localGraph, selectedTransition.id), true);
-                    setSelectedItem(null);
-                    showToast('Transition deleted');
-                  }}
-                  className="btn bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 text-xs w-full py-1.5 flex items-center justify-center gap-1"
-                >
-                  <Trash2 size={13} />
-                  <span>Delete Transition</span>
-                </button>
-              </div>
-            )}
-
-            {/* B. STATE NODE INSPECTOR */}
-            {selectedState && (
-              <div className="space-y-3">
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase">
-                    State Name:
-                  </label>
-                  <input
-                    type="text"
-                    value={selectedState.name || selectedState.id}
-                    onChange={(e) => {
-                      notifyUpdate({
-                        ...localGraph,
-                        states: {
-                          ...states,
-                          [selectedState.id]: {
-                            ...selectedState,
-                            name: e.target.value
-                          }
-                        }
-                      }, true);
-                    }}
-                    className="input-field text-xs py-1 w-full"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase">
-                    Motion Type:
-                  </label>
-                  <select
-                    value={selectedState.type}
-                    onChange={(e) => {
-                      notifyUpdate({
-                        ...localGraph,
-                        states: {
-                          ...states,
-                          [selectedState.id]: {
-                            ...selectedState,
-                            type: e.target.value
-                          }
-                        }
-                      }, true);
-                    }}
-                    className="input-field text-xs py-1 w-full"
-                  >
-                    <option value="BlendSpace2D">BlendSpace2D (4-Directional)</option>
-                    <option value="OneShot">OneShot (Attack / Action)</option>
-                    <option value="SingleClip">SingleClip</option>
-                  </select>
-                </div>
-
-                {/* Directional WASD Animation Mapping (BlendSpace2D) */}
-                {selectedState.type === 'BlendSpace2D' && (
-                  <div className="space-y-2 pt-2 border-t border-white/10">
-                    <div className="flex items-center justify-between">
-                      <label className="text-[10px] text-blue-300 font-bold uppercase tracking-wider flex items-center gap-1">
-                        <Compass size={12} /> WASD Animation Mapping
-                      </label>
-                      <span className="text-[9px] text-slate-500 font-mono">4 Directions</span>
-                    </div>
-
-                    <div className="space-y-1.5 font-mono text-xs">
-                      {/* W - Up (North) */}
-                      <div className="bg-slate-950/80 p-2 rounded-lg border border-white/5 space-y-1">
-                        <div className="flex items-center justify-between text-[10px]">
-                          <span className="text-blue-400 font-bold flex items-center gap-1.5">
-                            <kbd className="px-1.5 py-0.5 bg-blue-600/30 text-blue-300 rounded border border-blue-500/40 text-[10px]">W</kbd>
-                            <span>Up (North)</span>
-                          </span>
-                          <span className="text-slate-500 text-[9px]">moveY &gt; 0</span>
-                        </div>
-                        <select
-                          value={getSelectedAnimIdForDir('up')}
-                          onChange={(e) => handleAssignDirClip('up', e.target.value)}
-                          className="input-field text-[11px] py-1 w-full"
-                        >
-                          <option value="" disabled>-- Select Animation --</option>
-                          {animations.map((a) => (
-                            <option key={a.id} value={a.id}>
-                              🎬 {a.name} ({a.frameIds.length} frames)
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
-                      {/* S - Down (South) */}
-                      <div className="bg-slate-950/80 p-2 rounded-lg border border-white/5 space-y-1">
-                        <div className="flex items-center justify-between text-[10px]">
-                          <span className="text-blue-400 font-bold flex items-center gap-1.5">
-                            <kbd className="px-1.5 py-0.5 bg-blue-600/30 text-blue-300 rounded border border-blue-500/40 text-[10px]">S</kbd>
-                            <span>Down (South)</span>
-                          </span>
-                          <span className="text-slate-500 text-[9px]">moveY &lt; 0</span>
-                        </div>
-                        <select
-                          value={getSelectedAnimIdForDir('down')}
-                          onChange={(e) => handleAssignDirClip('down', e.target.value)}
-                          className="input-field text-[11px] py-1 w-full"
-                        >
-                          <option value="" disabled>-- Select Animation --</option>
-                          {animations.map((a) => (
-                            <option key={a.id} value={a.id}>
-                              🎬 {a.name} ({a.frameIds.length} frames)
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
-                      {/* D - Right (East) */}
-                      <div className="bg-slate-950/80 p-2 rounded-lg border border-white/5 space-y-1">
-                        <div className="flex items-center justify-between text-[10px]">
-                          <span className="text-blue-400 font-bold flex items-center gap-1.5">
-                            <kbd className="px-1.5 py-0.5 bg-blue-600/30 text-blue-300 rounded border border-blue-500/40 text-[10px]">D</kbd>
-                            <span>Right (East)</span>
-                          </span>
-                          <span className="text-slate-500 text-[9px]">moveX &gt; 0</span>
-                        </div>
-                        <select
-                          value={getSelectedAnimIdForDir('right')}
-                          onChange={(e) => handleAssignDirClip('right', e.target.value)}
-                          className="input-field text-[11px] py-1 w-full"
-                        >
-                          <option value="" disabled>-- Select Animation --</option>
-                          {animations.map((a) => (
-                            <option key={a.id} value={a.id}>
-                              🎬 {a.name} ({a.frameIds.length} frames)
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
-                      {/* A - Left (West) */}
-                      <div className="bg-slate-950/80 p-2 rounded-lg border border-white/5 space-y-1">
-                        <div className="flex items-center justify-between text-[10px]">
-                          <span className="text-blue-400 font-bold flex items-center gap-1.5">
-                            <kbd className="px-1.5 py-0.5 bg-blue-600/30 text-blue-300 rounded border border-blue-500/40 text-[10px]">A</kbd>
-                            <span>Left (West)</span>
-                          </span>
-                          <span className="text-slate-500 text-[9px]">moveX &lt; 0</span>
-                        </div>
-                        <select
-                          value={getSelectedAnimIdForDir('left')}
-                          onChange={(e) => handleAssignDirClip('left', e.target.value)}
-                          className="input-field text-[11px] py-1 w-full"
-                        >
-                          <option value="" disabled>-- Select Animation --</option>
-                          {animations.map((a) => (
-                            <option key={a.id} value={a.id}>
-                              🎬 {a.name} ({a.frameIds.length} frames)
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* OneShot Action Clip Mapping (Attack / Hurt / Action) */}
-                {selectedState.type === 'OneShot' && (
-                  <div className="space-y-2 pt-2 border-t border-white/10">
-                    <div className="flex items-center justify-between">
-                      <label className="text-[10px] text-purple-300 font-bold uppercase tracking-wider flex items-center gap-1">
-                        <Zap size={12} /> Action Animation Clip
-                      </label>
-                      <span className="text-[9px] text-slate-500 font-mono">Space Key</span>
-                    </div>
-
-                    <div className="bg-slate-950/80 p-2 rounded-lg border border-white/5 space-y-1">
-                      <div className="text-[10px] text-slate-400">Trigger Animation:</div>
-                      <select
-                        value={getSelectedAnimIdForOneShot()}
-                        onChange={(e) => handleAssignOneShotClip(e.target.value)}
-                        className="input-field text-[11px] py-1 w-full font-mono"
-                      >
-                        <option value="" disabled>-- Select Action Animation --</option>
-                        {animations.map((a) => (
-                          <option key={a.id} value={a.id}>
-                            ⚡ {a.name} ({a.frameIds.length} frames)
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-                )}
-
-                {/* Set as Default State */}
-                {defaultState !== selectedState.id && (
-                  <button
-                    onClick={() => {
-                      notifyUpdate({ ...localGraph, defaultState: selectedState.id }, true);
-                      showToast(`Set ${selectedState.id} as default state`);
-                    }}
-                    className="btn btn-secondary text-xs w-full py-1.5 flex items-center justify-center gap-1 text-amber-400 border-amber-500/30"
-                  >
-                    <Check size={13} />
-                    <span>Set as Default State</span>
-                  </button>
-                )}
-
-                {/* Delete State (Cannot delete default state) */}
-                {defaultState !== selectedState.id && (
-                  <button
-                    onClick={() => {
-                      notifyUpdate(removeStateFromGraph(localGraph, selectedState.id), true);
-                      setSelectedItem(null);
-                      showToast(`Deleted state: ${selectedState.id}`);
-                    }}
-                    className="btn bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 text-xs w-full py-1.5 flex items-center justify-center gap-1"
-                  >
-                    <Trash2 size={13} />
-                    <span>Delete State</span>
-                  </button>
-                )}
-              </div>
-            )}
-
-            {/* C. GENERAL PARAMETERS OVERVIEW (When nothing selected) */}
-            {!selectedTransition && !selectedState && (
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                    Animator Parameters
-                  </div>
-                  <div className="space-y-1.5 text-xs font-mono">
-                    <div className="flex justify-between items-center bg-slate-950 p-1.5 rounded border border-white/5">
-                      <span className="text-slate-300">speed</span>
-                      <span className="text-blue-400 font-semibold">Float (0.0)</span>
-                    </div>
-                    <div className="flex justify-between items-center bg-slate-950 p-1.5 rounded border border-white/5">
-                      <span className="text-slate-300">moveX</span>
-                      <span className="text-blue-400 font-semibold">Float (0.0)</span>
-                    </div>
-                    <div className="flex justify-between items-center bg-slate-950 p-1.5 rounded border border-white/5">
-                      <span className="text-slate-300">moveY</span>
-                      <span className="text-blue-400 font-semibold">Float (-1.0)</span>
-                    </div>
-                    <div className="flex justify-between items-center bg-slate-950 p-1.5 rounded border border-white/5">
-                      <span className="text-slate-300">isAttacking</span>
-                      <span className="text-purple-400 font-semibold">Trigger / Bool</span>
-                    </div>
-                  </div>
-                </div>
-
+                {/* Unity Mecanim Guide */}
                 <div className="p-2.5 rounded-lg bg-blue-500/10 border border-blue-500/20 space-y-1 text-[11px] text-slate-300">
                   <div className="font-bold text-blue-300 flex items-center gap-1">
                     <Info size={13} />
-                    Unity Mecanim Controls:
+                    Unity Mecanim Parameters:
                   </div>
                   <ul className="list-disc list-inside space-y-0.5 text-slate-400 text-[10px]">
-                    <li>Drag nodes by header to reposition smoothly.</li>
-                    <li>Click or drag from <span className="text-blue-400 font-bold">+</span> port to connect to any target state.</li>
-                    <li>Click any transition arrow to edit rules.</li>
+                    <li><strong>Float / Int:</strong> Compared with thresholds (&gt;, &lt;, ==).</li>
+                    <li><strong>Bool:</strong> Evaluates boolean true or false conditions.</li>
+                    <li><strong>Trigger:</strong> Resets to false immediately after transition.</li>
                   </ul>
                 </div>
+              </div>
+            )}
+
+            {/* TAB CONTENT: INSPECTOR */}
+            {sidebarTab === 'inspector' && (
+              <div className="space-y-3.5">
+                {/* A. TRANSITION INSPECTOR */}
+                {selectedTransition && (
+                  <div className="space-y-3">
+                    <div className="space-y-1">
+                      <div className="text-[11px] text-slate-400 flex items-center gap-1">
+                        <span>Transition:</span>
+                        <span className="font-bold text-slate-200">{selectedTransition.from}</span>
+                        <ArrowRight size={11} className="text-blue-400" />
+                        <span className="font-bold text-slate-200">{selectedTransition.to}</span>
+                      </div>
+                    </div>
+
+                    {/* Conditions Editor */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1.5">
+                          <label className="text-[10px] font-bold text-slate-400 uppercase">
+                            Conditions:
+                          </label>
+                          <span className="text-[10px] text-slate-500 font-mono">
+                            ({(selectedTransition.conditions || []).length})
+                          </span>
+                        </div>
+                        <button
+                          onClick={() => {
+                            const firstParam = allKnownParamNames[0] || 'speed';
+                            const pType = currentParameterTypes[firstParam] || (typeof currentParameters[firstParam] === 'boolean' ? 'Bool' : 'Float');
+                            const isBool = pType === 'Bool' || pType === 'Trigger';
+                            const newCond = {
+                              param: firstParam,
+                              operator: isBool ? '==' : '>',
+                              value: isBool ? true : 0.1
+                            };
+                            notifyUpdate(
+                              updateTransitionInGraph(localGraph, selectedTransition.id, {
+                                conditions: [...(selectedTransition.conditions || []), newCond]
+                              }),
+                              true
+                            );
+                          }}
+                          className="text-[10px] text-blue-400 hover:text-blue-300 flex items-center gap-0.5 bg-blue-500/10 hover:bg-blue-500/20 px-1.5 py-0.5 rounded border border-blue-500/20 transition-colors"
+                        >
+                          <Plus size={11} /> Add
+                        </button>
+                      </div>
+
+                      <div className="space-y-2">
+                        {(selectedTransition.conditions || []).map((cond, idx) => {
+                          const isCustomEditing = customParamInputIdx === idx;
+                          const paramType = currentParameterTypes[cond.param] || (typeof currentParameters[cond.param] === 'boolean' ? 'Bool' : 'Float');
+                          const isBoolMode = typeof cond.value === 'boolean' || cond.value === 'true' || cond.value === 'false' || paramType === 'Bool' || paramType === 'Trigger';
+
+                          return (
+                            <div key={idx} className="p-2 rounded bg-slate-950 border border-white/10 space-y-1.5 text-xs">
+                              {/* Row 1: Parameter Dropdown / Input + Mode Toggle + Delete */}
+                              <div className="flex items-center gap-1">
+                                {isCustomEditing ? (
+                                  <div className="flex items-center gap-1 flex-1 min-w-0">
+                                    <input
+                                      type="text"
+                                      placeholder="param name (e.g. is_attacked)"
+                                      value={cond.param}
+                                      autoFocus
+                                      list={`datalist-params-${idx}`}
+                                      onChange={(e) => {
+                                        const nextParam = e.target.value;
+                                        const nextConds = [...selectedTransition.conditions];
+                                        nextConds[idx] = { ...cond, param: nextParam };
+                                        let updatedGraph = updateTransitionInGraph(localGraph, selectedTransition.id, { conditions: nextConds });
+                                        if (nextParam.trim() && !(nextParam.trim() in (localGraph?.parameters || {}))) {
+                                          updatedGraph = addParameterToGraph(updatedGraph, nextParam.trim(), isBoolMode ? 'Bool' : 'Float', isBoolMode ? false : 0.0);
+                                        }
+                                        notifyUpdate(updatedGraph, true);
+                                      }}
+                                      className="input-field text-xs py-0.5 flex-1 font-mono text-blue-300"
+                                    />
+                                    <datalist id={`datalist-params-${idx}`}>
+                                      {allKnownParamNames.map(p => (
+                                        <option key={p} value={p} />
+                                      ))}
+                                    </datalist>
+                                    <button
+                                      onClick={() => setCustomParamInputIdx(null)}
+                                      className="p-1 text-emerald-400 hover:text-emerald-300 flex-shrink-0"
+                                      title="Done editing name"
+                                    >
+                                      <Check size={12} />
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center gap-1 flex-1 min-w-0">
+                                    <select
+                                      value={cond.param}
+                                      onChange={(e) => {
+                                        const chosen = e.target.value;
+                                        if (chosen === '__new__') {
+                                          setCustomParamInputIdx(idx);
+                                          return;
+                                        }
+                                        const chosenType = currentParameterTypes[chosen] || (typeof currentParameters[chosen] === 'boolean' ? 'Bool' : 'Float');
+                                        const isChosenBool = chosenType === 'Bool' || chosenType === 'Trigger';
+                                        const nextConds = [...selectedTransition.conditions];
+                                        nextConds[idx] = {
+                                          ...cond,
+                                          param: chosen,
+                                          operator: isChosenBool ? '==' : '>',
+                                          value: isChosenBool ? true : (typeof cond.value === 'number' ? cond.value : 0.1)
+                                        };
+                                        notifyUpdate(updateTransitionInGraph(localGraph, selectedTransition.id, { conditions: nextConds }), true);
+                                      }}
+                                      className="input-field text-xs py-0.5 flex-1 font-mono truncate"
+                                    >
+                                      {!allKnownParamNames.includes(cond.param) && (
+                                        <option value={cond.param}>{cond.param} (custom)</option>
+                                      )}
+                                      {allKnownParamNames.map(p => (
+                                        <option key={p} value={p}>
+                                          {p} ({currentParameterTypes[p] || (typeof currentParameters[p] === 'boolean' ? 'Bool' : 'Float')})
+                                        </option>
+                                      ))}
+                                      <option value="__new__">+ Type Custom Name...</option>
+                                    </select>
+                                    <button
+                                      onClick={() => setCustomParamInputIdx(idx)}
+                                      className="text-slate-400 hover:text-blue-300 p-0.5 rounded hover:bg-white/5 flex-shrink-0"
+                                      title="Type parameter name directly"
+                                    >
+                                      <Edit2 size={11} />
+                                    </button>
+                                  </div>
+                                )}
+
+                                {/* Mode Switcher Pill (Float/Int vs Bool) */}
+                                <button
+                                  onClick={() => {
+                                    const nextConds = [...selectedTransition.conditions];
+                                    if (isBoolMode) {
+                                      nextConds[idx] = {
+                                        ...cond,
+                                        operator: '>',
+                                        value: 0.1
+                                      };
+                                    } else {
+                                      nextConds[idx] = {
+                                        ...cond,
+                                        operator: '==',
+                                        value: true
+                                      };
+                                    }
+                                    notifyUpdate(updateTransitionInGraph(localGraph, selectedTransition.id, { conditions: nextConds }), true);
+                                  }}
+                                  className={`text-[9px] font-bold px-1.5 py-0.5 rounded border transition-colors flex items-center gap-0.5 flex-shrink-0 ${
+                                    isBoolMode
+                                      ? 'bg-purple-500/20 text-purple-300 border-purple-500/40 hover:bg-purple-500/30'
+                                      : 'bg-blue-500/20 text-blue-300 border-blue-500/40 hover:bg-blue-500/30'
+                                  }`}
+                                  title={isBoolMode ? 'Boolean mode (Click to switch to Float)' : 'Float mode (Click to switch to Bool)'}
+                                >
+                                  {isBoolMode ? 'Bool' : 'Float'}
+                                </button>
+
+                                {/* Delete Condition Button */}
+                                <button
+                                  onClick={() => {
+                                    const nextConds = selectedTransition.conditions.filter((_, i) => i !== idx);
+                                    notifyUpdate(updateTransitionInGraph(localGraph, selectedTransition.id, { conditions: nextConds }), true);
+                                  }}
+                                  className="text-slate-500 hover:text-rose-400 p-1 flex-shrink-0"
+                                  title="Remove Condition"
+                                >
+                                  <Trash2 size={12} />
+                                </button>
+                              </div>
+
+                              {/* Row 2: Operator & Value */}
+                              <div className="flex items-center gap-1.5 pt-0.5">
+                                <span className="text-[10px] text-slate-500 font-mono flex-shrink-0">When:</span>
+                                {isBoolMode ? (
+                                  <>
+                                    <select
+                                      value={cond.operator}
+                                      onChange={(e) => {
+                                        const nextConds = [...selectedTransition.conditions];
+                                        nextConds[idx] = { ...cond, operator: e.target.value };
+                                        notifyUpdate(updateTransitionInGraph(localGraph, selectedTransition.id, { conditions: nextConds }), true);
+                                      }}
+                                      className="input-field text-xs py-0.5 w-16"
+                                    >
+                                      <option value="==">== is</option>
+                                      <option value="!=">!= not</option>
+                                    </select>
+
+                                    <select
+                                      value={String(cond.value)}
+                                      onChange={(e) => {
+                                        const nextConds = [...selectedTransition.conditions];
+                                        nextConds[idx] = { ...cond, value: e.target.value === 'true' };
+                                        notifyUpdate(updateTransitionInGraph(localGraph, selectedTransition.id, { conditions: nextConds }), true);
+                                      }}
+                                      className="input-field text-xs py-0.5 flex-1 font-mono font-bold text-purple-300"
+                                    >
+                                      <option value="true">true</option>
+                                      <option value="false">false</option>
+                                    </select>
+                                  </>
+                                ) : (
+                                  <>
+                                    <select
+                                      value={cond.operator}
+                                      onChange={(e) => {
+                                        const nextConds = [...selectedTransition.conditions];
+                                        nextConds[idx] = { ...cond, operator: e.target.value };
+                                        notifyUpdate(updateTransitionInGraph(localGraph, selectedTransition.id, { conditions: nextConds }), true);
+                                      }}
+                                      className="input-field text-xs py-0.5 w-16 font-mono"
+                                    >
+                                      <option value=">">&gt;</option>
+                                      <option value="<">&lt;</option>
+                                      <option value="==">==</option>
+                                      <option value="!=">!=</option>
+                                      <option value="<=">&lt;=</option>
+                                      <option value=">=">&gt;=</option>
+                                    </select>
+
+                                    <input
+                                      type="number"
+                                      step="0.1"
+                                      value={cond.value}
+                                      onChange={(e) => {
+                                        const nextConds = [...selectedTransition.conditions];
+                                        nextConds[idx] = { ...cond, value: parseFloat(e.target.value) || 0 };
+                                        notifyUpdate(updateTransitionInGraph(localGraph, selectedTransition.id, { conditions: nextConds }), true);
+                                      }}
+                                      className="input-field text-xs py-0.5 flex-1 font-mono"
+                                      placeholder="0.0"
+                                    />
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+
+                        {(!selectedTransition.conditions || selectedTransition.conditions.length === 0) && (
+                          <div className="text-[11px] text-slate-500 italic p-2 bg-slate-950 rounded border border-white/5 text-center">
+                            Instant Transition (No conditions)
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Delete Transition Button */}
+                    <button
+                      onClick={() => {
+                        notifyUpdate(removeTransitionFromGraph(localGraph, selectedTransition.id), true);
+                        setSelectedItem(null);
+                        showToast('Transition deleted');
+                      }}
+                      className="btn bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 text-xs w-full py-1.5 flex items-center justify-center gap-1"
+                    >
+                      <Trash2 size={13} />
+                      <span>Delete Transition</span>
+                    </button>
+                  </div>
+                )}
+
+                {/* B. STATE NODE INSPECTOR */}
+                {selectedState && (
+                  <div className="space-y-3">
+                    <div className="space-y-1">
+                      <div className="text-[10px] font-bold text-slate-400 uppercase">State Name:</div>
+                      <input
+                        type="text"
+                        value={selectedState.name || selectedState.id}
+                        onChange={(e) => {
+                          const newStates = {
+                            ...states,
+                            [selectedState.id]: { ...selectedState, name: e.target.value }
+                          };
+                          notifyUpdate({ ...localGraph, states: newStates }, true);
+                        }}
+                        className="input-field text-xs py-1 w-full font-bold text-slate-100"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <div className="text-[10px] font-bold text-slate-400 uppercase">Motion Type:</div>
+                      <select
+                        value={selectedState.type || 'SingleClip'}
+                        onChange={(e) => {
+                          const newStates = {
+                            ...states,
+                            [selectedState.id]: { ...selectedState, type: e.target.value }
+                          };
+                          notifyUpdate({ ...localGraph, states: newStates }, true);
+                        }}
+                        className="input-field text-xs py-1 w-full font-mono"
+                      >
+                        <option value="BlendSpace2D">BlendSpace2D (4-Way Directional)</option>
+                        <option value="OneShot">OneShot (Action / Triggered)</option>
+                        <option value="SingleClip">SingleClip (Looping)</option>
+                      </select>
+                    </div>
+
+                    {/* 4-Way Directional BlendSpace Clip Mappings */}
+                    {selectedState.type === 'BlendSpace2D' && (
+                      <div className="p-2.5 rounded-lg bg-slate-950 border border-white/10 space-y-2">
+                        <div className="text-[10px] font-bold text-blue-400 uppercase tracking-wider flex items-center gap-1">
+                          <Compass size={12} /> 2D Directional Motion Clips:
+                        </div>
+                        <div className="space-y-1.5 text-[11px]">
+                          {['down', 'up', 'right', 'left'].map((dir) => {
+                            const currentClipId = selectedState.clipIds?.[dir];
+                            return (
+                              <div key={dir} className="flex items-center justify-between gap-1.5">
+                                <span className="font-mono text-slate-400 w-12 capitalize">{dir}:</span>
+                                <select
+                                  value={currentClipId || ''}
+                                  onChange={(e) => {
+                                    const nextClipIds = { ...(selectedState.clipIds || {}), [dir]: e.target.value };
+                                    const newStates = {
+                                      ...states,
+                                      [selectedState.id]: { ...selectedState, clipIds: nextClipIds }
+                                    };
+                                    notifyUpdate({ ...localGraph, states: newStates }, true);
+                                  }}
+                                  className="input-field text-[11px] py-0.5 flex-1 font-mono"
+                                >
+                                  <option value="" disabled>-- Select Clip --</option>
+                                  {animations.map((a) => (
+                                    <option key={a.id} value={a.id}>
+                                      {a.name} ({a.frameIds.length} frames)
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* OneShot Action Clip Mapping */}
+                    {selectedState.type === 'OneShot' && (
+                      <div className="p-2.5 rounded-lg bg-slate-950 border border-white/10 space-y-2">
+                        <div className="text-[10px] font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1">
+                          <Zap size={12} /> OneShot Action Clip:
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] text-slate-400">Action Clip:</label>
+                          <select
+                            value={selectedState.clipId || ''}
+                            onChange={(e) => {
+                              const newStates = {
+                                ...states,
+                                [selectedState.id]: { ...selectedState, clipId: e.target.value }
+                              };
+                              notifyUpdate({ ...localGraph, states: newStates }, true);
+                            }}
+                            className="input-field text-[11px] py-1 w-full font-mono"
+                          >
+                            <option value="" disabled>-- Select Action Animation --</option>
+                            {animations.map((a) => (
+                              <option key={a.id} value={a.id}>
+                                ⚡ {a.name} ({a.frameIds.length} frames)
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Set as Default State */}
+                    {defaultState !== selectedState.id && (
+                      <button
+                        onClick={() => {
+                          notifyUpdate({ ...localGraph, defaultState: selectedState.id }, true);
+                          showToast(`Set ${selectedState.id} as default state`);
+                        }}
+                        className="btn btn-secondary text-xs w-full py-1.5 flex items-center justify-center gap-1 text-amber-400 border-amber-500/30"
+                      >
+                        <Check size={13} />
+                        <span>Set as Default State</span>
+                      </button>
+                    )}
+
+                    {/* Delete State (Cannot delete default state) */}
+                    {defaultState !== selectedState.id && (
+                      <button
+                        onClick={() => {
+                          notifyUpdate(removeStateFromGraph(localGraph, selectedState.id), true);
+                          setSelectedItem(null);
+                          showToast(`Deleted state: ${selectedState.id}`);
+                        }}
+                        className="btn bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 text-xs w-full py-1.5 flex items-center justify-center gap-1"
+                      >
+                        <Trash2 size={13} />
+                        <span>Delete State</span>
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {/* C. GENERAL OVERVIEW (When nothing selected in Inspector) */}
+                {!selectedTransition && !selectedState && (
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                          Animator Parameters ({allKnownParamNames.length})
+                        </div>
+                        <button
+                          onClick={() => setSidebarTab('parameters')}
+                          className="text-[10px] text-blue-400 hover:text-blue-300 flex items-center gap-0.5"
+                        >
+                          <SlidersHorizontal size={11} /> Manage
+                        </button>
+                      </div>
+
+                      <div className="space-y-1.5 text-xs font-mono">
+                        {allKnownParamNames.map((key) => {
+                          const val = currentParameters[key];
+                          const type = currentParameterTypes[key] || (typeof val === 'boolean' ? 'Bool' : typeof val === 'number' ? 'Float' : 'Trigger');
+                          return (
+                            <div key={key} className="flex justify-between items-center bg-slate-950 p-1.5 rounded border border-white/5">
+                              <span className="text-slate-300 font-semibold truncate mr-2">{key}</span>
+                              <span
+                                className={`text-[10px] font-bold px-1.5 py-0.2 rounded border flex-shrink-0 ${
+                                  type === 'Float'
+                                    ? 'bg-blue-500/20 text-blue-300 border-blue-500/30'
+                                    : type === 'Int'
+                                    ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30'
+                                    : type === 'Bool'
+                                    ? 'bg-purple-500/20 text-purple-300 border-purple-500/30'
+                                    : 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                                }`}
+                              >
+                                {type} ({val !== undefined ? String(val) : '0.0'})
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div className="p-2.5 rounded-lg bg-blue-500/10 border border-blue-500/20 space-y-1 text-[11px] text-slate-300">
+                      <div className="font-bold text-blue-300 flex items-center gap-1">
+                        <Info size={13} />
+                        Unity Mecanim Controls:
+                      </div>
+                      <ul className="list-disc list-inside space-y-0.5 text-slate-400 text-[10px]">
+                        <li>Drag nodes by header to reposition smoothly.</li>
+                        <li>Click or drag from <span className="text-blue-400 font-bold">+</span> port to connect to any target state.</li>
+                        <li>Click any transition arrow to edit rules.</li>
+                      </ul>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>

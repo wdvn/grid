@@ -3,11 +3,21 @@ import { groupFramesByRows } from './animationClips.js';
 
 export class CharacterStateMachine {
   constructor(config = {}, animations = [], frames = []) {
+    this.parameterTypes = {
+      speed: 'Float',
+      moveX: 'Float',
+      moveY: 'Float',
+      isAttacking: 'Trigger',
+      is_attacked: 'Bool',
+      ...(config.parameterTypes || {})
+    };
+
     this.parameters = {
       speed: 0.0,
       moveX: 0.0,
       moveY: -1.0, // Default facing down
       isAttacking: false,
+      is_attacked: false,
       ...config.parameters
     };
 
@@ -90,6 +100,12 @@ export class CharacterStateMachine {
         }
 
         if (this.evaluateConditions(transition.conditions)) {
+          // Reset trigger parameters when transition executes
+          for (const cond of (transition.conditions || [])) {
+            if (this.parameterTypes[cond.param] === 'Trigger' || cond.param === 'isAttacking') {
+              this.parameters[cond.param] = false;
+            }
+          }
           // If transitioning out of action state, reset attack trigger
           if (this.currentStateId === 'Action' && transition.to !== 'Action') {
             this.parameters.isAttacking = false;
@@ -108,6 +124,12 @@ export class CharacterStateMachine {
     const currentState = this.states[this.currentStateId];
     if (currentState && currentState.type === 'OneShot' && this.stateTimer >= (currentState.duration || 0.5)) {
       this.parameters.isAttacking = false;
+      // Reset any active triggers
+      for (const [key, type] of Object.entries(this.parameterTypes)) {
+        if (type === 'Trigger') {
+          this.parameters[key] = false;
+        }
+      }
       this.currentStateId = currentState.returnState || 'Idle';
       this.stateTimer = 0;
       this.idleGraceTimer = 0;
@@ -121,13 +143,26 @@ export class CharacterStateMachine {
 
     return conditions.every(cond => {
       const val = this.parameters[cond.param];
+      const isBoolValue = typeof cond.value === 'boolean' || cond.value === 'true' || cond.value === 'false';
+      const isBoolType = this.parameterTypes?.[cond.param] === 'Bool' || this.parameterTypes?.[cond.param] === 'Trigger';
+
+      if (isBoolValue || isBoolType) {
+        const targetBool = cond.value === true || cond.value === 'true';
+        const currentBool = Boolean(val);
+        if (cond.operator === '!=') return currentBool !== targetBool;
+        return currentBool === targetBool;
+      }
+
+      const numVal = Number(val !== undefined ? val : 0);
+      const numTarget = Number(cond.value);
+
       switch (cond.operator) {
-        case '>': return val > cond.value;
-        case '>=': return val >= cond.value;
-        case '<': return val < cond.value;
-        case '<=': return val <= cond.value;
-        case '==': return val === cond.value;
-        case '!=': return val !== cond.value;
+        case '>': return numVal > numTarget;
+        case '>=': return numVal >= numTarget;
+        case '<': return numVal < numTarget;
+        case '<=': return numVal <= numTarget;
+        case '==': return numVal === numTarget;
+        case '!=': return numVal !== numTarget;
         default: return false;
       }
     });
@@ -232,7 +267,15 @@ export function createDefaultCharacterGraph(frames = [], animations = []) {
         speed: 0.0,
         moveX: 0.0,
         moveY: -1.0,
-        isAttacking: false
+        isAttacking: false,
+        is_attacked: false
+      },
+      parameterTypes: {
+        speed: 'Float',
+        moveX: 'Float',
+        moveY: 'Float',
+        isAttacking: 'Trigger',
+        is_attacked: 'Bool'
       },
       defaultState: 'Idle',
       anyStatePosition: { x: 50, y: 50 },
@@ -336,7 +379,15 @@ export function createDefaultCharacterGraph(frames = [], animations = []) {
         speed: 0.0,
         moveX: 0.0,
         moveY: -1.0,
-        isAttacking: false
+        isAttacking: false,
+        is_attacked: false
+      },
+      parameterTypes: {
+        speed: 'Float',
+        moveX: 'Float',
+        moveY: 'Float',
+        isAttacking: 'Trigger',
+        is_attacked: 'Bool'
       },
       defaultState: 'Idle',
       anyStatePosition: { x: 50, y: 50 },
@@ -416,7 +467,15 @@ export function createDefaultCharacterGraph(frames = [], animations = []) {
       speed: 0.0,
       moveX: 0.0,
       moveY: -1.0,
-      isAttacking: false
+      isAttacking: false,
+      is_attacked: false
+    },
+    parameterTypes: {
+      speed: 'Float',
+      moveX: 'Float',
+      moveY: 'Float',
+      isAttacking: 'Trigger',
+      is_attacked: 'Bool'
     },
     defaultState: 'Idle',
     anyStatePosition: { x: 50, y: 50 },
@@ -540,17 +599,106 @@ export function removeStateFromGraph(graph, stateId) {
   };
 }
 
+// Parameter management helpers for Unity Mecanim style parameters
+export function addParameterToGraph(graph, paramName, paramType = 'Float', defaultValue = 0.0) {
+  const name = (paramName || '').trim();
+  if (!name) return graph;
+
+  let finalVal = defaultValue;
+  if (paramType === 'Bool' || paramType === 'Trigger') {
+    finalVal = defaultValue === true || defaultValue === 'true';
+  } else if (paramType === 'Int') {
+    finalVal = parseInt(defaultValue, 10) || 0;
+  } else {
+    finalVal = parseFloat(defaultValue) || 0.0;
+  }
+
+  return {
+    ...graph,
+    parameters: {
+      ...(graph.parameters || {}),
+      [name]: finalVal
+    },
+    parameterTypes: {
+      ...(graph.parameterTypes || {}),
+      [name]: paramType
+    }
+  };
+}
+
+export function removeParameterFromGraph(graph, paramName) {
+  if (!paramName) return graph;
+
+  const newParams = { ...(graph.parameters || {}) };
+  delete newParams[paramName];
+
+  const newTypes = { ...(graph.parameterTypes || {}) };
+  delete newTypes[paramName];
+
+  return {
+    ...graph,
+    parameters: newParams,
+    parameterTypes: newTypes
+  };
+}
+
+export function updateParameterInGraph(graph, oldName, { name, type, defaultValue } = {}) {
+  if (!oldName) return graph;
+  const targetName = (name || oldName).trim();
+  if (!targetName) return graph;
+
+  const newParams = { ...(graph.parameters || {}) };
+  const newTypes = { ...(graph.parameterTypes || {}) };
+
+  const currentType = type || newTypes[oldName] || (typeof newParams[oldName] === 'boolean' ? 'Bool' : 'Float');
+  let finalVal = defaultValue !== undefined ? defaultValue : newParams[oldName];
+  if (currentType === 'Bool' || currentType === 'Trigger') {
+    finalVal = finalVal === true || finalVal === 'true';
+  } else if (currentType === 'Int') {
+    finalVal = parseInt(finalVal, 10) || 0;
+  } else {
+    finalVal = parseFloat(finalVal) || 0.0;
+  }
+
+  if (oldName !== targetName) {
+    delete newParams[oldName];
+    delete newTypes[oldName];
+  }
+  newParams[targetName] = finalVal;
+  newTypes[targetName] = currentType;
+
+  // Also update any transitions referring to oldName if renamed
+  let newTransitions = graph.transitions || [];
+  if (oldName !== targetName) {
+    newTransitions = newTransitions.map(t => ({
+      ...t,
+      conditions: (t.conditions || []).map(c => c.param === oldName ? { ...c, param: targetName } : c)
+    }));
+  }
+
+  return {
+    ...graph,
+    parameters: newParams,
+    parameterTypes: newTypes,
+    transitions: newTransitions
+  };
+}
+
 // Export Schema Generator for Game Engines
 export function generateEngineGraphExport(graphConfig, engine = 'unity') {
   if (engine === 'unity') {
     return JSON.stringify({
       schema: 'Unity.Mecanim.AnimatorController',
       name: graphConfig.name || 'CharacterAnimatorController',
-      parameters: Object.entries(graphConfig.parameters || {}).map(([key, val]) => ({
-        name: key,
-        type: typeof val === 'boolean' ? 'Bool' : typeof val === 'number' ? 'Float' : 'Trigger',
-        defaultValue: val
-      })),
+      parameters: Object.entries(graphConfig.parameters || {}).map(([key, val]) => {
+        const explicitType = graphConfig.parameterTypes?.[key];
+        const inferredType = typeof val === 'boolean' ? 'Bool' : typeof val === 'number' ? 'Float' : 'Trigger';
+        return {
+          name: key,
+          type: explicitType || inferredType,
+          defaultValue: val
+        };
+      }),
       layers: [
         {
           name: 'Base Layer',
