@@ -528,8 +528,12 @@ export function PixelCanvasEditor({
           </div>
         </div>
 
-        {/* Right: Undo/Redo & Zoom Viewport Controls */}
-        <div className="flex items-center gap-1.5">
+        {/* Right: History Undo/Redo & Viewport Helper */}
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] text-slate-500 font-mono hidden md:inline">
+            Space: Pan • Wheel: Zoom
+          </span>
+
           {/* Undo / Redo (24px icons) */}
           <div className="h-6 flex items-center bg-slate-950 rounded border border-white/10 px-0.5 flex-shrink-0">
             <button
@@ -547,34 +551,6 @@ export function PixelCanvasEditor({
               title="Redo (Ctrl+Y)"
             >
               <RotateCw size={11} />
-            </button>
-          </div>
-
-          {/* Zoom Controls */}
-          <div className="h-6 flex items-center bg-slate-950 rounded border border-white/10 px-1 flex-shrink-0">
-            <button
-              onClick={() => setZoom((z) => Math.max(z - 1, 1))}
-              className="w-5 h-5 flex items-center justify-center rounded hover:bg-slate-800 text-slate-400"
-              title="Zoom Out"
-            >
-              <ZoomOut size={11} />
-            </button>
-            <span className="text-[10px] font-mono text-blue-400 w-8 text-center font-bold">
-              {zoom}×
-            </span>
-            <button
-              onClick={() => setZoom((z) => Math.min(z + 1, 64))}
-              className="w-5 h-5 flex items-center justify-center rounded hover:bg-slate-800 text-slate-400"
-              title="Zoom In"
-            >
-              <ZoomIn size={11} />
-            </button>
-            <button
-              onClick={handleAutoFitZoom}
-              className="h-5 px-1.5 rounded hover:bg-slate-800 text-[10px] font-mono text-slate-400 hover:text-white"
-              title="Fit to Screen"
-            >
-              Fit
             </button>
           </div>
         </div>
@@ -652,8 +628,11 @@ export function PixelCanvasEditor({
             backgroundSize: '20px 20px'
           }}
         >
-          {/* Subtle Viewport Watermark */}
-          <div className="absolute top-2.5 left-3 z-10 pointer-events-none text-slate-500/50 font-mono text-[10px] select-none">
+          {/* Subtle Viewport Watermark (Top Left) */}
+          <div
+            style={{ position: 'absolute', top: '10px', left: '12px', zIndex: 10 }}
+            className="pointer-events-none text-slate-500/60 font-mono text-[10px] select-none"
+          >
             {frameWidth} × {frameHeight} px
           </div>
 
@@ -731,15 +710,84 @@ export function PixelCanvasEditor({
             )}
           </div>
 
-          {/* Floating Bottom-Left Precision HUD */}
-          <div className="absolute bottom-2.5 left-2.5 z-30 flex items-center gap-1.5 p-1 rounded bg-slate-900/90 border border-white/10 shadow-lg text-[10px] font-mono text-slate-300">
-            <span className="text-slate-400 pl-1">Zoom:</span>
-            <span className="text-blue-400 font-bold">{Math.round(zoom * 100)}%</span>
-            <span className="text-slate-600">|</span>
-            <span className="text-slate-400">XY:</span>
-            <span className="text-amber-300 font-bold pr-1">
-              {hoverPixel ? `${hoverPixel.x},${hoverPixel.y}` : '-,-'}
-            </span>
+          {/* Floating Bottom-Right Zoom & Viewport Controller Component */}
+          <div
+            onMouseDown={(e) => e.stopPropagation()}
+            onWheel={(e) => e.stopPropagation()}
+            style={{ position: 'absolute', bottom: '12px', right: '12px', zIndex: 30 }}
+            className="flex items-center gap-1.5 p-1 rounded-lg bg-[#0f1624]/95 backdrop-blur-md border border-white/15 shadow-xl shadow-black/70 text-slate-200 select-none pointer-events-auto"
+          >
+            {/* Cursor XY Coordinates */}
+            <div className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-mono text-slate-400">
+              <span className="text-slate-500">XY:</span>
+              <span className="text-amber-400 font-bold min-w-[36px]">
+                {hoverPixel ? `${hoverPixel.x},${hoverPixel.y}` : '-,-'}
+              </span>
+            </div>
+
+            <div className="w-px h-3.5 bg-white/15" />
+
+            {/* Zoom Out Button */}
+            <button
+              onClick={() => setZoom((z) => Math.max(z - 1, 1))}
+              className="w-6 h-6 rounded flex items-center justify-center text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+              title="Zoom Out (Scroll Down)"
+            >
+              <ZoomOut size={12} />
+            </button>
+
+            {/* Clickable Zoom Percentage Badge */}
+            <button
+              onClick={() => {
+                if (zoom === 1) {
+                  handleAutoFitZoom();
+                } else {
+                  setZoom(1);
+                  setPan({ x: 0, y: 0 });
+                }
+              }}
+              className="px-1.5 py-0.5 rounded text-[11px] font-mono font-bold text-blue-400 hover:text-blue-300 hover:bg-blue-500/10 transition-all text-center min-w-[42px]"
+              title="Click to toggle 100% / Auto Fit"
+            >
+              {Math.round(zoom * 100)}%
+            </button>
+
+            {/* Zoom In Button */}
+            <button
+              onClick={() => setZoom((z) => Math.min(z + 1, 64))}
+              className="w-6 h-6 rounded flex items-center justify-center text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+              title="Zoom In (Scroll Up)"
+            >
+              <ZoomIn size={12} />
+            </button>
+
+            <div className="w-px h-3.5 bg-white/15" />
+
+            {/* 1:1 Reset Button */}
+            <button
+              onClick={() => {
+                setZoom(1);
+                setPan({ x: 0, y: 0 });
+              }}
+              className={`px-1.5 h-6 rounded text-[10px] font-mono transition-colors ${
+                zoom === 1
+                  ? 'bg-blue-600 text-white font-bold'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-800'
+              }`}
+              title="Reset Zoom to 1:1 (100%)"
+            >
+              1:1
+            </button>
+
+            {/* Fit to Viewport Button */}
+            <button
+              onClick={handleAutoFitZoom}
+              className="px-2 h-6 rounded bg-slate-800/80 hover:bg-blue-600 text-slate-300 hover:text-white text-[10px] font-mono font-semibold border border-white/10 hover:border-blue-500/50 transition-all flex items-center gap-1"
+              title="Fit Canvas to Viewport"
+            >
+              <Focus size={11} />
+              <span>Fit</span>
+            </button>
           </div>
         </div>
       </div>
