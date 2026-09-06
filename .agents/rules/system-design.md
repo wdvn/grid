@@ -177,3 +177,15 @@ Sử dụng cấu trúc huy hiệu chuẩn `.badge .badge-{color}` với font Je
    - Phím Space: Kích hoạt Action/Attack state.
    - Phím Del/Backspace: Xóa frame hoặc node đang chọn.
    - Phím Ctrl+A / Ctrl+D: Chọn tất cả / Bỏ chọn frame.
+
+---
+
+## 6. Quy tắc Bắt Buộc Cập Nhật Hướng Dẫn Sử Dụng (Documentation Rule)
+
+- **Nguyên tắc cốt lõi**: Bất kỳ khi nào có thay đổi, bổ sung tính năng mới, hoặc nâng cấp giao diện/luồng hoạt động trong dự án (ở cả 3 Module: `Creator`, `Animator`, `Scene`), **bắt buộc phải cập nhật tài liệu hướng dẫn sử dụng** (`README.md` hoặc các tài liệu hướng dẫn đi kèm).
+- **Yêu cầu nội dung**:
+  1. Mô tả rõ ràng mục đích và giá trị của tính năng mới.
+  2. Hướng dẫn từng bước thao tác (Step-by-step workflow).
+  3. Liệt kê các phím tắt, các nút bấm trên Toolbar / T-Panel / N-Panel và ý nghĩa trạng thái.
+  4. Đảm bảo ảnh minh họa hoặc ví dụ cấu hình (nếu có) phản ánh đúng phiên bản hiện tại của ứng dụng.
+

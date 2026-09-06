@@ -751,17 +751,20 @@ export default function App() {
     setIsAnimationPlaying((prev) => !prev);
   };
 
-  // Switch Module via Keyboard Shortcuts: 1 -> Creator, 2 -> Animator, 3 -> Scene 3D
+  // Switch Module via Keyboard Shortcuts: Alt+1 / F1 -> Creator, Alt+2 / F2 -> Animator, Alt+3 / F3 -> Scene 3D
   useEffect(() => {
     const handleModuleShortcut = (e) => {
       const activeTag = document.activeElement?.tagName?.toLowerCase();
       if (activeTag === 'input' || activeTag === 'textarea' || activeTag === 'select') return;
 
-      if (e.key === '1') {
+      if ((e.altKey && e.key === '1') || e.key === 'F1') {
+        e.preventDefault();
         setActiveModule('creator');
-      } else if (e.key === '2') {
+      } else if ((e.altKey && e.key === '2') || e.key === 'F2') {
+        e.preventDefault();
         setActiveModule('animator');
-      } else if (e.key === '3') {
+      } else if ((e.altKey && e.key === '3') || e.key === 'F3') {
+        e.preventDefault();
         setActiveModule('scene');
       }
     };
@@ -781,8 +784,9 @@ export default function App() {
     setActiveModule('animator');
   }, []);
 
-  // Keyboard Shortcuts Hook
+  // Keyboard Shortcuts Hook (Enabled specifically for Animator Module)
   useKeyboardShortcuts({
+    enabled: activeModule === 'animator',
     selectedFrameId,
     frames,
     onDuplicateFrame: handleDuplicateFrame,

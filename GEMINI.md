@@ -23,3 +23,8 @@ Chi tiết đầy đủ các quy tắc thành phần, bảng màu, typography, C
 - **Phông chữ**: UI dùng `'Plus Jakarta Sans'`, kỹ thuật / số đo / code / kbd dùng `'JetBrains Mono'`.
 - **Pixel Art**: Luôn áp dụng `image-rendering: pixelated;` và `ctx.imageSmoothingEnabled = false`.
 - **Hiệu năng**: Các tác vụ 60 FPS (preview loop, canvas draw, 3D render loop) bắt buộc sử dụng `useRef` + `requestAnimationFrame`, không đặt trong React state.
+
+## 3. Quy tắc Tài liệu & Hướng dẫn Sử dụng (Documentation Mandatory Rule)
+- **BẮT BUỘC**: Luôn luôn cập nhật tài liệu hướng dẫn sử dụng (`README.md` và các tài liệu hướng dẫn liên quan) mỗi khi thêm mới, sửa đổi hoặc nâng cấp bất kỳ tính năng nào của dự án.
+- Tài liệu phải giải thích rõ ràng: cách sử dụng, phím tắt, ý nghĩa các nút/thanh công cụ và luồng tương tác thực tế giữa các Module (`Creator`, `Animator`, `Scene`).
+

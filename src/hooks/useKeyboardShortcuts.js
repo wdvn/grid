@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 
 export function useKeyboardShortcuts({
+  enabled = true,
   selectedFrameId,
   frames,
   onDuplicateFrame,
@@ -11,6 +12,8 @@ export function useKeyboardShortcuts({
   onPasteImage
 }) {
   useEffect(() => {
+    if (!enabled) return;
+
     const handleKeyDown = (e) => {
       // Ignore keybindings if typing in text inputs or textareas
       const activeTag = document.activeElement ? document.activeElement.tagName.toLowerCase() : '';
@@ -97,5 +100,5 @@ export function useKeyboardShortcuts({
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('paste', handlePaste);
     };
-  }, [selectedFrameId, frames, onDuplicateFrame, onDeleteFrame, onNudgeFrame, onSelectAll, onDeselectAll, onPasteImage]);
+  }, [enabled, selectedFrameId, frames, onDuplicateFrame, onDeleteFrame, onNudgeFrame, onSelectAll, onDeselectAll, onPasteImage]);
 }
