@@ -3,10 +3,14 @@ import {
   ArrowRight,
   Upload,
   Download,
-  CheckCircle2
+  CheckCircle2,
+  ChevronDown,
+  FolderOpen
 } from 'lucide-react';
 import { BlenderPropertiesPanel } from './BlenderPropertiesPanel';
 import { PixelCanvasEditor } from './PixelCanvasEditor';
+import { ImportSheetModal } from './ImportSheetModal';
+import { detectBestSheetGrid } from '../../utils/sheetSlicer';
 import {
   PALETTES,
   applyPixelation,
@@ -19,6 +23,10 @@ export function CreatorModule({ onSendToAnimator }) {
   // Canvas Dimensions: Default 96x96 for smaller pixels and high-density detail!
   const [resolutionW, setResolutionW] = useState(96);
   const [resolutionH, setResolutionH] = useState(96);
+
+  // Import Sprite Sheet Modal state
+  const [importModalData, setImportModalData] = useState(null);
+  const [isImportMenuOpen, setIsImportMenuOpen] = useState(false);
 
   const [activeColor, setActiveColor] = useState('#3b82f6');
   const [activePaletteId, setActivePaletteId] = useState('pico8');
@@ -370,7 +378,7 @@ export function CreatorModule({ onSendToAnimator }) {
     setTimeout(() => setNotification(null), 2500);
   };
 
-  // Upload external photo/image to downscale to high-density pixel art
+  // Upload sprite sheet or image: Analyze grid and open Import & Slice Modal
   const handleImageUpload = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -379,33 +387,58 @@ export function CreatorModule({ onSendToAnimator }) {
     reader.onload = (event) => {
       const img = new Image();
       img.onload = () => {
-        const c = document.createElement('canvas');
-        c.width = resolutionW;
-        c.height = resolutionH;
-        const ctx = c.getContext('2d');
-        ctx.imageSmoothingEnabled = false;
-
-        ctx.drawImage(img, 0, 0, resolutionW, resolutionH);
-
-        applyAdjustments(ctx, resolutionW, resolutionH, { brightness: 5, contrast: 15, saturation: 10 });
-        applyPaletteAndDithering(ctx, resolutionW, resolutionH, 'pico8', 'floyd');
-
-        const newFrame = {
-          id: `uploaded_${Date.now()}`,
-          canvas: c
-        };
-
-        setAssetName(file.name.replace(/\.[^/.]+$/, ''));
-        setFrames([newFrame]);
-        setActiveFrameIndex(0);
-
-        setNotification(`Image imported & converted to ${resolutionW}×${resolutionH} pixel art!`);
-        setTimeout(() => setNotification(null), 3000);
+        const detected = detectBestSheetGrid(img);
+        setImportModalData({
+          file,
+          img,
+          fileName: file.name.replace(/\.[^/.]+$/, ''),
+          naturalW: img.naturalWidth,
+          naturalH: img.naturalHeight,
+          detected
+        });
       };
       img.src = event.target.result;
     };
     reader.readAsDataURL(file);
     e.target.value = '';
+  };
+
+  // Confirm and slice imported frames from modal into Creator
+  const handleConfirmImport = ({ frames: newFrames, resolutionW: newW, resolutionH: newH, assetName: newName }) => {
+    if (!newFrames || newFrames.length === 0) return;
+
+    setResolutionW(newW);
+    setResolutionH(newH);
+    setFrames(newFrames);
+    setActiveFrameIndex(0);
+    if (newName) setAssetName(newName);
+
+    setNotification(`Imported & divided ${newFrames.length} frames (${newW}×${newH} px)!`);
+    setTimeout(() => setNotification(null), 3500);
+  };
+
+  // Handle importing a sample sheet URL (e.g. dragon_8dir_transparent.png)
+  const handleImportSampleSheet = async (url, name) => {
+    try {
+      const res = await fetch(url);
+      const blob = await res.blob();
+      const file = new File([blob], `${name}.png`, { type: 'image/png' });
+      const img = new Image();
+      img.onload = () => {
+        const detected = detectBestSheetGrid(img);
+        setImportModalData({
+          file,
+          img,
+          fileName: name,
+          naturalW: img.naturalWidth,
+          naturalH: img.naturalHeight,
+          detected
+        });
+      };
+      img.src = URL.createObjectURL(blob);
+    } catch (err) {
+      console.error('Failed to load sample sheet:', err);
+    }
   };
 
   // Bake Filter Effects directly onto all frames in strip
@@ -576,15 +609,75 @@ export function CreatorModule({ onSendToAnimator }) {
             </div>
           )}
 
-          {/* Import External Image */}
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            className="btn btn-secondary btn-sm flex items-center gap-1.5 whitespace-nowrap"
-            title="Import an image or photo to convert into fine pixel art"
-          >
-            <Upload size={12} className="text-blue-400" />
-            <span>Import Image</span>
-          </button>
+          {/* Import External Sprite Sheet / Image with Dropdown */}
+          <div className="relative">
+            <div className="flex items-center rounded bg-slate-900 border border-white/10 hover:border-white/20">
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="btn btn-secondary btn-sm flex items-center gap-1.5 whitespace-nowrap border-0 rounded-r-none px-2 text-xs"
+                title="Import and auto-slice a sprite sheet from your computer"
+              >
+                <Upload size={12} className="text-blue-400" />
+                <span>Import Sheet</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsImportMenuOpen(!isImportMenuOpen)}
+                className="h-6 px-1.5 text-slate-400 hover:text-white border-l border-white/10 hover:bg-white/5 rounded-r flex items-center justify-center transition-colors"
+                title="Select sample sprite sheet or browse file"
+              >
+                <ChevronDown size={11} />
+              </button>
+            </div>
+
+            {isImportMenuOpen && (
+              <div
+                className="absolute right-0 top-full mt-1 w-64 bg-[#0e1626] border border-white/10 rounded-lg shadow-xl py-1 z-50 text-xs"
+                onMouseLeave={() => setIsImportMenuOpen(false)}
+              >
+                <button
+                  onClick={() => {
+                    setIsImportMenuOpen(false);
+                    fileInputRef.current?.click();
+                  }}
+                  className="w-full text-left px-3 py-1.5 flex items-center gap-2 hover:bg-slate-800 text-slate-200"
+                >
+                  <FolderOpen size={13} className="text-blue-400" />
+                  <span>Choose local file...</span>
+                </button>
+                <div className="border-t border-white/10 my-1" />
+                <div className="px-3 py-1 text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+                  Sample Sprite Sheets
+                </div>
+                <button
+                  onClick={() => {
+                    setIsImportMenuOpen(false);
+                    handleImportSampleSheet('/dragon_8dir_transparent.png', 'dragon_8dir_transparent');
+                  }}
+                  className="w-full text-left px-3 py-1.5 flex items-center justify-between hover:bg-slate-800 text-slate-200"
+                >
+                  <div className="flex items-center gap-2">
+                    <span>🐉</span>
+                    <span>Dragon 8-Dir Sheet</span>
+                  </div>
+                  <span className="font-mono text-[10px] text-slate-400">1120×2240 (32f)</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setIsImportMenuOpen(false);
+                    handleImportSampleSheet('/download_test_1.png', 'duck_walk_sheet');
+                  }}
+                  className="w-full text-left px-3 py-1.5 flex items-center justify-between hover:bg-slate-800 text-slate-200"
+                >
+                  <div className="flex items-center gap-2">
+                    <span>🦆</span>
+                    <span>Duck Sprite Sheet</span>
+                  </div>
+                  <span className="font-mono text-[10px] text-slate-400">344×1536 (8f)</span>
+                </button>
+              </div>
+            )}
+          </div>
           <input
             type="file"
             ref={fileInputRef}
@@ -653,6 +746,15 @@ export function CreatorModule({ onSendToAnimator }) {
           onGeneratePreset={(type) => generateProceduralPreset(type, resolutionW, resolutionH)}
         />
       </div>
+
+      {/* 3. Interactive Import & Slice Sprite Sheet Modal */}
+      <ImportSheetModal
+        isOpen={Boolean(importModalData)}
+        onClose={() => setImportModalData(null)}
+        fileData={importModalData}
+        currentStudioResolution={{ w: resolutionW, h: resolutionH }}
+        onConfirmImport={handleConfirmImport}
+      />
     </div>
   );
 }

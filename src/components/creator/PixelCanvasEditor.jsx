@@ -19,6 +19,29 @@ import {
   ZoomOut
 } from 'lucide-react';
 
+function CreatorFrameThumb({ canvas }) {
+  const thumbRef = useRef(null);
+
+  useEffect(() => {
+    if (!thumbRef.current || !canvas) return;
+    const tc = thumbRef.current;
+    const ctx = tc.getContext('2d');
+    ctx.imageSmoothingEnabled = false;
+    ctx.clearRect(0, 0, tc.width, tc.height);
+    ctx.drawImage(canvas, 0, 0, tc.width, tc.height);
+  }, [canvas]);
+
+  return (
+    <canvas
+      ref={thumbRef}
+      width={28}
+      height={28}
+      className="w-7 h-7 object-contain"
+      style={{ imageRendering: 'pixelated' }}
+    />
+  );
+}
+
 export function PixelCanvasEditor({
   frameWidth = 96,
   frameHeight = 96,
@@ -817,12 +840,7 @@ export function PixelCanvasEditor({
                     {idx + 1}
                   </span>
                   {frame.canvas && (
-                    <img
-                      src={frame.canvas.toDataURL()}
-                      alt={`Frame ${idx + 1}`}
-                      className="w-7 h-7 object-contain"
-                      style={{ imageRendering: 'pixelated' }}
-                    />
+                    <CreatorFrameThumb canvas={frame.canvas} />
                   )}
                 </div>
               );
