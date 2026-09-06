@@ -64,7 +64,7 @@ export const FrameCard = React.memo(function FrameCard({
       {/* Thumbnail Preview */}
       <div
         className="w-full flex-1 bg-checkerboard rounded relative overflow-hidden flex items-center justify-center my-0.5"
-        style={{ width: '100%', minHeight: '44px', position: 'relative' }}
+        style={{ width: '100%', height: '44px', maxHeight: '44px', position: 'relative' }}
       >
         <FrameThumbnail imageElement={effectiveImageElement} frame={frame} />
       </div>

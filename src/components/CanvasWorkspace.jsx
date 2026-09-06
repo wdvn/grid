@@ -63,8 +63,8 @@ export function CanvasWorkspace({
       const scaleX = (containerW - 120) / imageDimensions.width;
       const scaleY = (containerH - 120) / imageDimensions.height;
       const autoScale = Math.min(scaleX, scaleY);
-      // Small pixel art sheets like Fox_Run (192x128) should comfortably scale up to 3x or 4x
-      const initialZoom = Math.min(Math.max(autoScale, 0.5), 4);
+      // Small pixel art sheets like Fox_Run (192x128) comfortably scale up to 3x or 4x; large sheets (e.g. 2240px) scale down to fit
+      const initialZoom = Math.min(Math.max(autoScale, 0.05), 4);
 
       setZoom(Math.round(initialZoom * 10) / 10);
       setPan({

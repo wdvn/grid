@@ -11,13 +11,18 @@ export const FrameThumbnail = React.memo(function FrameThumbnail({ imageElement,
   useEffect(() => {
     if (!canvasRef.current || !imageElement || w <= 0 || h <= 0) return;
 
+    const maxDim = 72;
+    const scale = Math.min(1, maxDim / Math.max(w, h));
+    const thumbW = Math.max(1, Math.round(w * scale));
+    const thumbH = Math.max(1, Math.round(h * scale));
+
     const canvas = canvasRef.current;
-    canvas.width = Math.max(1, w);
-    canvas.height = Math.max(1, h);
+    canvas.width = thumbW;
+    canvas.height = thumbH;
 
     const ctx = canvas.getContext('2d');
     ctx.imageSmoothingEnabled = false;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.clearRect(0, 0, thumbW, thumbH);
     ctx.drawImage(
       imageElement,
       x,
@@ -26,8 +31,8 @@ export const FrameThumbnail = React.memo(function FrameThumbnail({ imageElement,
       h,
       0,
       0,
-      w,
-      h
+      thumbW,
+      thumbH
     );
   }, [imageElement, x, y, w, h]);
 
@@ -39,6 +44,7 @@ export const FrameThumbnail = React.memo(function FrameThumbnail({ imageElement,
       style={{
         maxWidth: '100%',
         maxHeight: '100%',
+        objectFit: 'contain',
         imageRendering: 'pixelated',
         display: 'block',
         margin: 'auto'

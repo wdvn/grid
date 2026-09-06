@@ -64,7 +64,38 @@ export function AnimationPreview({
     motionBlurRef.current = motionBlur;
   }, [motionBlur]);
   const trailHistoryRef = useRef([]);
-  const [zoomScale, setZoomScale] = useState(3); // 2x, 3x, 4x, 6x
+  const [zoomScale, setZoomScale] = useState('fit'); // 'fit' | 0.5 | 1 | 2 | 3 | 4
+
+  // Compute effective zoom scale based on active frame, container bounds, and preview mode
+  const getEffectiveScale = useCallback((frame, availableW, availableH, mode = previewMode) => {
+    if (!frame || frame.w <= 0 || frame.h <= 0) return 1;
+    const pad = 24;
+    const safeW = Math.max(20, availableW - pad);
+    const safeH = Math.max(20, availableH - pad);
+
+    if (zoomScale === 'fit') {
+      if (mode === 'character') {
+        // Character mode: small sprites leave room to walk (max ~45% of arena), large sprites fit within 85% of arena
+        const maxArenaFraction = (frame.w > 80 || frame.h > 80) ? 0.85 : 0.45;
+        const targetW = safeW * maxArenaFraction;
+        const targetH = safeH * maxArenaFraction;
+        const scale = Math.min(targetW / frame.w, targetH / frame.h);
+        if (scale >= 1.5) {
+          return Math.floor(scale);
+        }
+        return Math.max(0.02, Math.round(scale * 1000) / 1000);
+      } else {
+        // Clip mode: frame comfortably fills the viewport up to 92%
+        const scale = Math.min((safeW * 0.92) / frame.w, (safeH * 0.92) / frame.h);
+        if (scale >= 1.5) {
+          return Math.floor(scale);
+        }
+        return Math.max(0.02, Math.round(scale * 1000) / 1000);
+      }
+    }
+
+    return Number(zoomScale) || 1;
+  }, [zoomScale, previewMode]);
 
   // Active animation from Godot SpriteFrames animations list
   const activeAnimation = useMemo(() => {
@@ -373,16 +404,20 @@ export function AnimationPreview({
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     if (activeFrame && activeFrame.w > 0 && activeFrame.h > 0) {
-      const drawW = activeFrame.w * zoomScale;
-      const drawH = activeFrame.h * zoomScale;
+      const curScale = getEffectiveScale(activeFrame, curArena.w, curArena.h, 'character');
+      const drawW = Math.max(1, Math.round(activeFrame.w * curScale));
+      const drawH = Math.max(1, Math.round(activeFrame.h * curScale));
 
       let drawX, drawY;
-      if (isStationary) {
+      // If stationary, or if the sprite exceeds the arena, keep it cleanly centered
+      if (isStationary || drawW >= curArena.w || drawH >= curArena.h) {
         drawX = Math.round((curArena.w - drawW) / 2);
         drawY = Math.round((curArena.h - drawH) / 2);
       } else {
-        drawX = Math.round(charPosRef.current.x - drawW / 2);
-        drawY = Math.round(charPosRef.current.y - drawH / 2);
+        const pivotX = activeFrame.pivotX !== undefined ? activeFrame.pivotX : 0.5;
+        const pivotY = activeFrame.pivotY !== undefined ? activeFrame.pivotY : 0.5;
+        drawX = Math.round(charPosRef.current.x - drawW * pivotX);
+        drawY = Math.round(charPosRef.current.y - drawH * pivotY);
       }
 
       // Draw Sprite with 100% crisp pixel rendering and no ghost artifacts
@@ -433,7 +468,7 @@ export function AnimationPreview({
         drawH
       );
     }
-  }, [imageElement, sheetMap, frames, zoomScale, isStationary]);
+  }, [imageElement, sheetMap, frames, getEffectiveScale, isStationary]);
 
   // High-Performance 60 FPS Game Loop for Character Mode (Buttery-smooth movement & frame timing)
   useEffect(() => {
@@ -486,16 +521,30 @@ export function AnimationPreview({
           const moveSpeed = 130 * dt; // Pixels per second
           const curArena = arenaSizeRef.current;
           const frameForBounds = (currentClip.length > 0 ? currentClip[charFrameIdxRef.current % currentClip.length] : null) || frames[0];
-          const halfW = frameForBounds ? (frameForBounds.w * zoomScale) / 2 : 24;
-          const halfH = frameForBounds ? (frameForBounds.h * zoomScale) / 2 : 24;
-          const pad = 10;
+          const curScale = frameForBounds ? getEffectiveScale(frameForBounds, curArena.w, curArena.h, 'character') : 1;
+          const halfW = frameForBounds ? (frameForBounds.w * curScale) / 2 : 24;
+          const halfH = frameForBounds ? (frameForBounds.h * curScale) / 2 : 24;
+          const pad = 8;
 
           let nx = charPosRef.current.x + mx * moveSpeed;
           let ny = charPosRef.current.y - my * moveSpeed;
 
-          // Clean clamping prevents character from ever clipping arena borders
-          nx = Math.max(halfW + pad, Math.min(curArena.w - halfW - pad, nx));
-          ny = Math.max(halfH + pad, Math.min(curArena.h - halfH - pad, ny));
+          // Safe clamping prevents character from freezing or escaping when sprite is large
+          const minX = halfW + pad;
+          const maxX = curArena.w - halfW - pad;
+          if (minX <= maxX) {
+            nx = Math.max(minX, Math.min(maxX, nx));
+          } else {
+            nx = curArena.w / 2;
+          }
+
+          const minY = halfH + pad;
+          const maxY = curArena.h - halfH - pad;
+          if (minY <= maxY) {
+            ny = Math.max(minY, Math.min(maxY, ny));
+          } else {
+            ny = curArena.h / 2;
+          }
 
           charPosRef.current.x = nx;
           charPosRef.current.y = ny;
@@ -537,7 +586,7 @@ export function AnimationPreview({
 
     animId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(animId);
-  }, [previewMode, isPlaying, fps, isStationary, drawCharacterCanvas, frames, zoomScale]);
+  }, [previewMode, isPlaying, fps, isStationary, drawCharacterCanvas, frames, getEffectiveScale]);
 
   // Classic Clip Mode Frame Tick Timer
   useEffect(() => {
@@ -570,8 +619,14 @@ export function AnimationPreview({
       return;
     }
 
-    const targetW = Math.max(1, activeFrame.w * zoomScale);
-    const targetH = Math.max(1, activeFrame.h * zoomScale);
+    const curArena = arenaSizeRef.current;
+    const curScale = getEffectiveScale(activeFrame, curArena.w, curArena.h, 'clip');
+
+    // Cap maximum canvas buffer resolution to 2048 to prevent GPU memory allocation crashes
+    const safeScale = Math.min(curScale, 2048 / Math.max(activeFrame.w, activeFrame.h));
+    const targetW = Math.max(1, Math.round(activeFrame.w * safeScale));
+    const targetH = Math.max(1, Math.round(activeFrame.h * safeScale));
+
     if (canvas.width !== targetW) canvas.width = targetW;
     if (canvas.height !== targetH) canvas.height = targetH;
 
@@ -612,7 +667,7 @@ export function AnimationPreview({
       canvas.width,
       canvas.height
     );
-  }, [previewMode, currentFrameIndex, activeFrames, zoomScale, onionSkin, imageElement, sheetMap]);
+  }, [previewMode, currentFrameIndex, activeFrames, getEffectiveScale, onionSkin, imageElement, sheetMap]);
 
   // Background style helper
   const getBgStyleClass = () => {
@@ -739,8 +794,8 @@ export function AnimationPreview({
                 : {
                     maxWidth: '92%',
                     maxHeight: '92%',
-                    width: 'auto',
-                    height: 'auto'
+                    objectFit: 'contain',
+                    margin: 'auto'
                   })
             }}
           />
@@ -796,18 +851,25 @@ export function AnimationPreview({
         )}
 
         {/* Quick Zoom Pill */}
-        <div className="absolute top-2 right-2 flex items-center gap-1 bg-slate-950/80 p-0.5 rounded border border-white/10">
-          {[2, 3, 4, 6].map((z) => (
-            <button
-              key={z}
-              onClick={() => setZoomScale(z)}
-              className={`px-1.5 py-0.5 text-[9px] font-mono rounded ${
-                zoomScale === z ? 'bg-blue-600 text-white font-bold' : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              {z}x
-            </button>
-          ))}
+        <div className="absolute top-2 right-2 flex items-center gap-1 bg-slate-950/85 p-0.5 rounded-md border border-white/10 shadow-md z-10">
+          {['fit', 0.5, 1, 2, 3, 4].map((z) => {
+            const isSelected = zoomScale === z;
+            const label = z === 'fit' ? 'Fit' : `${z}x`;
+            return (
+              <button
+                key={String(z)}
+                onClick={() => setZoomScale(z)}
+                className={`px-1.5 py-0.5 text-[9px] font-mono rounded transition-colors ${
+                  isSelected
+                    ? 'bg-blue-600 text-white font-bold shadow-sm'
+                    : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                }`}
+                title={z === 'fit' ? 'Auto-fit frame to preview viewport' : `Zoom ${z}x`}
+              >
+                {label}
+              </button>
+            );
+          })}
         </div>
       </div>
 
