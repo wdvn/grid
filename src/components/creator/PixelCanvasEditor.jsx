@@ -218,8 +218,8 @@ export function PixelCanvasEditor({
     ctx.clearRect(0, 0, frameWidth, frameHeight);
 
     if (editorMode === 'rig') {
-      // Live FK transformed layers rendering
-      const comp = compositeLayers(layers, frameWidth, frameHeight, fkResult, boneLayerMap);
+      // Live FK transformed layers rendering (Cutout + Single-Layer Skinning)
+      const comp = compositeLayers(layers, frameWidth, frameHeight, fkResult, boneLayerMap, bones);
       ctx.drawImage(comp, 0, 0);
     } else {
       // Normal Composite layers rendering
@@ -701,7 +701,7 @@ export function PixelCanvasEditor({
           );
           onUpdateBones?.(updatedBones);
         } else if (part === 'joint') {
-          // Move joint (Root bone or offset)
+          // Move joint position (both root and child bones)
           const dx = Math.round(floatCoord.x - dragBoneState.startX);
           const dy = Math.round(floatCoord.y - dragBoneState.startY);
 
@@ -709,11 +709,7 @@ export function PixelCanvasEditor({
           if (targetBone) {
             const updatedBones = bones.map((b) => {
               if (b.id === boneId) {
-                if (!b.parentId) {
-                  return { ...b, x: Math.round(b.x + dx), y: Math.round(b.y + dy) };
-                } else {
-                  return { ...b, offsetX: (b.offsetX || 0) + dx, offsetY: (b.offsetY || 0) + dy };
-                }
+                return { ...b, x: Math.round(b.x + dx), y: Math.round(b.y + dy) };
               }
               return b;
             });

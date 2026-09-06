@@ -23,7 +23,8 @@ import {
   scaleBonesToResolution,
   compositeLayers,
   bakePosedLayers,
-  autoBindLayersToBones
+  autoBindLayersToBones,
+  autoSegmentLayerToBones
 } from '../../utils/skeletonRig';
 
 export function CreatorModule({ onSendToAnimator }) {
@@ -651,6 +652,51 @@ export function CreatorModule({ onSendToAnimator }) {
     setTimeout(() => setNotification(null), 2000);
   };
 
+  // ✂️ CORE FEATURE: Auto-segment single layer sprite into separate bone layers!
+  const handleAutoSegmentToLayers = () => {
+    if (!currentFrame || !currentFrame.rig?.bones) return;
+    const activeLayer =
+      currentFrame.layers.find((l) => l.id === currentFrame.activeLayerId) ||
+      currentFrame.layers[0];
+    if (!activeLayer) return;
+
+    const { layers: segmentedLayers, bones: updatedBones } = autoSegmentLayerToBones(
+      activeLayer,
+      currentFrame.rig.bones,
+      resolutionW,
+      resolutionH
+    );
+
+    if (segmentedLayers.length <= 1 && segmentedLayers[0] === activeLayer) {
+      setNotification('No opaque pixels detected to segment.');
+      setTimeout(() => setNotification(null), 2000);
+      return;
+    }
+
+    const otherLayers = currentFrame.layers.filter((l) => l.id !== activeLayer.id);
+    const newLayersList = [...otherLayers, ...segmentedLayers];
+    const composite = compositeLayers(newLayersList, resolutionW, resolutionH);
+
+    setFrames((prev) => {
+      const copy = [...prev];
+      copy[activeFrameIndex] = {
+        ...currentFrame,
+        layers: newLayersList,
+        activeLayerId: segmentedLayers[0]?.id || currentFrame.activeLayerId,
+        rig: {
+          ...currentFrame.rig,
+          bones: updatedBones
+        },
+        compositeCanvas: composite,
+        canvas: composite
+      };
+      return copy;
+    });
+
+    setNotification(`✂️ Split into ${segmentedLayers.length} bone layers! Ready to pose!`);
+    setTimeout(() => setNotification(null), 3000);
+  };
+
   // ⚡ CORE FEATURE: Bake Pose to New Frame (Tạo frame mới từ frame có sẵn)
   const handleBakePoseToNewFrame = () => {
     if (!currentFrame) return;
@@ -984,6 +1030,20 @@ export function CreatorModule({ onSendToAnimator }) {
     e.target.value = '';
   };
 
+  const detectPresetFromFilename = (name = '') => {
+    const lower = name.toLowerCase();
+    if (lower.includes('dragon') || lower.includes('worm') || lower.includes('snake') || lower.includes('caterpillar') || lower.includes('serpent')) {
+      return 'dragon_worm';
+    }
+    if (lower.includes('fox') || lower.includes('dog') || lower.includes('wolf') || lower.includes('horse') || lower.includes('quadruped') || lower.includes('beast') || lower.includes('cat')) {
+      return 'quadruped';
+    }
+    if (lower.includes('ghost') || lower.includes('slime') || lower.includes('tentacle') || lower.includes('chain') || lower.includes('tail')) {
+      return 'limb_chain';
+    }
+    return 'biped';
+  };
+
   // Confirm and slice imported frames from modal into Creator
   const handleConfirmImport = ({ frames: slicedList, resolutionW: newW, resolutionH: newH, assetName: newName }) => {
     if (!slicedList || slicedList.length === 0) return;
@@ -991,15 +1051,17 @@ export function CreatorModule({ onSendToAnimator }) {
     setResolutionW(newW);
     setResolutionH(newH);
 
+    const detectedPreset = detectPresetFromFilename(newName);
+
     const formattedFrames = slicedList.map((f, i) =>
-      createSingleLayerFrame(`import_${Date.now()}_${i}`, f.canvas, 'biped', newW, newH)
+      createSingleLayerFrame(`import_${Date.now()}_${i}`, f.canvas, detectedPreset, newW, newH)
     );
 
     setFrames(formattedFrames);
     setActiveFrameIndex(0);
     if (newName) setAssetName(newName);
 
-    setNotification(`Imported ${formattedFrames.length} frames with Layer & Rig support!`);
+    setNotification(`Imported ${formattedFrames.length} frames with ${RIG_PRESETS[detectedPreset]?.name || detectedPreset} Rig!`);
     setTimeout(() => setNotification(null), 3500);
   };
 
@@ -1417,6 +1479,7 @@ export function CreatorModule({ onSendToAnimator }) {
           onResetPose={handleResetPose}
           onBindLayerToBone={handleBindLayerToBone}
           onAutoBindLayers={handleAutoBindLayers}
+          onAutoSegmentToLayers={handleAutoSegmentToLayers}
           onBakePoseToNewFrame={handleBakePoseToNewFrame}
           onApplyPoseToCurrentFrame={handleApplyPoseToCurrentFrame}
         />

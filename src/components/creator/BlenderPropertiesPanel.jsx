@@ -21,7 +21,8 @@ import {
   ChevronUp,
   ChevronDown,
   Link,
-  Combine
+  Combine,
+  Scissors
 } from 'lucide-react';
 import { PALETTES } from '../../utils/pixelFilters';
 import { RIG_PRESETS, BLEND_MODES } from '../../utils/skeletonRig';
@@ -92,6 +93,7 @@ export function BlenderPropertiesPanel({
   onResetPose,
   onBindLayerToBone,
   onAutoBindLayers,
+  onAutoSegmentToLayers,
   onBakePoseToNewFrame,
   onApplyPoseToCurrentFrame
 }) {
@@ -462,10 +464,10 @@ export function BlenderPropertiesPanel({
               </span>
 
               {/* Secondary Actions */}
-              <div className="flex items-center gap-1 pt-1">
+              <div className="grid grid-cols-2 gap-1 pt-1">
                 <button
                   onClick={onResetPose}
-                  className="h-6 flex-1 rounded bg-slate-900 border border-white/10 hover:border-white/20 text-slate-300 hover:text-white text-[10px] font-medium flex items-center justify-center gap-1 transition-colors"
+                  className="h-6 rounded bg-slate-900 border border-white/10 hover:border-white/20 text-slate-300 hover:text-white text-[10px] font-medium flex items-center justify-center gap-1 transition-colors"
                   title="Reset all bone angles to 0"
                 >
                   <RotateCcw size={10} />
@@ -473,15 +475,23 @@ export function BlenderPropertiesPanel({
                 </button>
                 <button
                   onClick={onAutoBindLayers}
-                  className="h-6 flex-1 rounded bg-slate-900 border border-white/10 hover:border-blue-400/40 text-blue-400 text-[10px] font-medium flex items-center justify-center gap-1 transition-colors"
-                  title="Auto-bind layers to bones by name matching"
+                  className="h-6 rounded bg-slate-900 border border-white/10 hover:border-blue-400/40 text-blue-400 text-[10px] font-medium flex items-center justify-center gap-1 transition-colors"
+                  title="Auto-bind existing layers to bones by name matching"
                 >
                   <Link size={10} />
                   <span>Auto-Bind</span>
                 </button>
                 <button
+                  onClick={onAutoSegmentToLayers}
+                  className="h-6 rounded bg-slate-900 border border-white/10 hover:border-emerald-400/40 text-emerald-400 text-[10px] font-medium flex items-center justify-center gap-1 transition-colors"
+                  title="Auto-slice current sprite layer into separate layers for each bone (Head, Body, Tail, etc.)"
+                >
+                  <Scissors size={10} />
+                  <span>✂️ Split to Layers</span>
+                </button>
+                <button
                   onClick={onApplyPoseToCurrentFrame}
-                  className="h-6 flex-1 rounded bg-slate-900 border border-white/10 hover:border-white/20 text-slate-300 hover:text-white text-[10px] font-medium flex items-center justify-center gap-1 transition-colors"
+                  className="h-6 rounded bg-slate-900 border border-white/10 hover:border-white/20 text-slate-300 hover:text-white text-[10px] font-medium flex items-center justify-center gap-1 transition-colors"
                   title="Apply pose directly onto current frame"
                 >
                   <span>Apply Pose</span>
@@ -494,15 +504,16 @@ export function BlenderPropertiesPanel({
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
                 Skeleton Presets:
               </span>
-              <div className="grid grid-cols-3 gap-1">
+              <div className="grid grid-cols-2 gap-1">
                 {Object.entries(RIG_PRESETS).map(([key, preset]) => (
                   <button
                     key={key}
                     onClick={() => onSelectRigPreset?.(key)}
-                    className="h-6 px-1 rounded bg-slate-900 border border-white/10 hover:border-blue-400 text-slate-300 hover:text-blue-300 text-[10px] font-medium truncate transition-colors"
+                    className="h-6 px-1.5 rounded bg-slate-900 border border-white/10 hover:border-blue-400 text-slate-300 hover:text-blue-300 text-[10px] font-medium truncate transition-colors text-left flex items-center gap-1"
                     title={preset.description}
                   >
-                    {preset.name.split(' ')[0]}
+                    <span>{key === 'dragon_worm' ? '🐉' : key === 'biped' ? '🧍' : key === 'quadruped' ? '🐕' : '🔗'}</span>
+                    <span className="truncate">{preset.name.split(' (')[0]}</span>
                   </button>
                 ))}
               </div>
